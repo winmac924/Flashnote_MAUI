@@ -111,8 +111,8 @@ if ($LASTEXITCODE -eq 0) {
     Write-ColorOutput "`n✅ バージョン更新が完了しました！" "Green"
     if ($AutoRelease) {
         Write-ColorOutput "🚀 GitHub Actionsが自動リリースを作成します。" "Cyan"
-        Write-Host "📖 リリース状況: https://github.com/winmac924/AnkiPlus_MAUI/releases" -ForegroundColor Yellow
-        Write-Host "⚙️ Actions状況: https://github.com/winmac924/AnkiPlus_MAUI/actions" -ForegroundColor Yellow
+        Write-Host "📖 リリース状況: https://github.com/winmac924/Flashnote_MAUI/releases" -ForegroundColor Yellow
+        Write-Host "⚙️ Actions状況: https://github.com/winmac924/Flashnote_MAUI/actions" -ForegroundColor Yellow
     }
 } else {
     Write-ColorOutput "❌ バージョン更新中にエラーが発生しました。" "Red"
