@@ -1,4 +1,4 @@
-# AnkiPlus MAUI - Windows リリースビルドスクリプト (GitHub対応)
+# Flashnote MAUI - Windows リリースビルドスクリプト (GitHub対応)
 
 param(
     [string]$Version = "1.1.0",
@@ -81,9 +81,9 @@ function Update-CsprojVersion {
     Write-Host "   - FileVersion: $assemblyVersion" -ForegroundColor Yellow
 }
 
-Write-Host "🚀 AnkiPlus MAUI リリースビルドを開始します..." -ForegroundColor Green
+Write-Host "🚀 Flashnote MAUI リリースビルドを開始します..." -ForegroundColor Green
 
-$csprojPath = "AnkiPlus_MAUI.csproj"
+$csprojPath = "Flashnote_MAUI.csproj"
 
 # バージョン自動インクリメント
 if ($IncrementVersion) {
@@ -211,7 +211,7 @@ Write-Host "`n🎊 すべての処理が完了しました！" -ForegroundColor 
 
 if ($CreateTag -and $PushToGitHub) {
     Write-Host "📖 GitHubリリースページを確認してください:" -ForegroundColor Yellow
-    Write-Host "   https://github.com/winmac924/AnkiPlus_MAUI/releases" -ForegroundColor Cyan
+    Write-Host "   https://github.com/winmac924/Flashnote_MAUI/releases" -ForegroundColor Cyan
     Write-Host "⏰ GitHub Actionsの処理完了まで数分お待ちください。" -ForegroundColor Yellow
 }
 

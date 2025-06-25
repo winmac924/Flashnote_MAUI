@@ -18,9 +18,9 @@ function Write-ColorOutput {
 
 # 現在のバージョンを取得
 function Get-CurrentVersion {
-    $csprojPath = "AnkiPlus_MAUI.csproj"
+    $csprojPath = "Flashnote_MAUI.csproj"
     if (-not (Test-Path $csprojPath)) {
-        Write-ColorOutput "❌ AnkiPlus_MAUI.csproj が見つかりません。" "Red"
+        Write-ColorOutput "❌ Flashnote_MAUI.csproj が見つかりません。" "Red"
         exit 1
     }
     
