@@ -1,0 +1,229 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>PDFテキスト選択</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <style>
+        html, body { 
+            margin: 0; 
+            padding: 0; 
+            font-family: Arial, sans-serif; 
+            background: transparent !important;
+            color: #333;
+            user-select: text;
+            pointer-events: auto;
+            height: 100vh;
+            width: 100vw;
+            overflow: hidden;
+        }
+        
+        #textContainer {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: auto;
+            z-index: 10;
+        }
+        
+        .text-line {
+            position: absolute;
+            font-size: 14px;
+            line-height: 1.2;
+            color: rgba(0,0,0,0.8);
+            background: rgba(255,255,255,0.1);
+            padding: 2px 4px;
+            border-radius: 2px;
+            cursor: text;
+            user-select: text;
+            -webkit-user-select: text;
+            -moz-user-select: text;
+            -ms-user-select: text;
+            white-space: nowrap;
+        }
+        
+        .text-line:hover {
+            background: rgba(255,255,0,0.2);
+        }
+        
+        .text-line::selection {
+            background: rgba(0,100,255,0.3);
+        }
+        
+        #status {
+            position: fixed;
+            top: 10px;
+            left: 10px;
+            background: rgba(0,0,0,0.7);
+            color: white;
+            padding: 5px 10px;
+            border-radius: 3px;
+            font-size: 12px;
+            z-index: 1000;
+            pointer-events: none;
+        }
+        
+        #debug {
+            position: fixed;
+            bottom: 10px;
+            left: 10px;
+            background: rgba(0,0,0,0.7);
+            color: white;
+            padding: 5px 10px;
+            border-radius: 3px;
+            font-size: 10px;
+            z-index: 1000;
+            max-width: 300px;
+            max-height: 100px;
+            overflow-y: auto;
+            pointer-events: none;
+        }
+    </style>
+</head>
+<body>
+    <div id="status">PDFテキスト選択モード</div>
+    
+    <div id="textContainer">
+        <!-- PDFテキストがここに動的に挿入されます -->
+    </div>
+    
+    <div id="debug">初期化中...</div>
+    
+    <script>
+        console.log('PDFテキスト選択HTML初期化開始');
+        
+        let debugDiv = document.getElementById('debug');
+        let statusDiv = document.getElementById('status');
+        let textContainer = document.getElementById('textContainer');
+        
+        function updateStatus(message) {
+            if (statusDiv) {
+                statusDiv.textContent = message;
+            }
+            console.log('ステータス:', message);
+        }
+        
+        function updateDebug(message) {
+            if (debugDiv) {
+                debugDiv.innerHTML = new Date().toLocaleTimeString() + ': ' + message;
+            }
+            console.log('デバッグ:', message);
+        }
+        
+        // PDFテキストを表示する関数
+        function updatePageText(text, pageNumber) {
+            try {
+                updateDebug('ページ' + pageNumber + 'テキスト更新開始');
+                
+                if (!text || text.trim() === '') {
+                    textContainer.innerHTML = '<div class="text-line" style="top: 50px; left: 50px;">このページにはテキストがありません</div>';
+                    updateStatus('ページ ' + pageNumber + ' - テキストなし');
+                    return;
+                }
+                
+                // テキストを行ごとに分割
+                const lines = text.split('\n').filter(line => line.trim() !== '');
+                textContainer.innerHTML = '';
+                
+                // 各行を配置
+                lines.forEach((line, index) => {
+                    if (index >= 20) return; // 最大20行まで
+                    
+                    const span = document.createElement('span');
+                    span.className = 'text-line';
+                    span.textContent = line.trim();
+                    span.style.top = (50 + index * 25) + 'px';
+                    span.style.left = '50px';
+                    
+                    textContainer.appendChild(span);
+                });
+                
+                updateStatus('ページ ' + pageNumber + ' - ' + lines.length + '行のテキスト表示中');
+                updateDebug('テキスト表示完了: ' + lines.length + '行');
+                
+            } catch (error) {
+                updateDebug('エラー: ' + error.message);
+                console.error('updatePageText エラー:', error);
+            }
+        }
+        
+        // テキスト選択を検出
+        document.addEventListener('mouseup', function(e) {
+            setTimeout(function() {
+                const selectedText = getSelectedText();
+                if (selectedText && selectedText.length > 0) {
+                    updateDebug('テキスト選択: "' + selectedText.substring(0, 30) + '"');
+                    notifyCSharp('textSelected', selectedText);
+                }
+            }, 100);
+        });
+        
+        // 選択されたテキストを取得
+        function getSelectedText() {
+            try {
+                if (window.getSelection) {
+                    return window.getSelection().toString();
+                } else if (document.selection && document.selection.createRange) {
+                    return document.selection.createRange().text;
+                }
+                return '';
+            } catch (error) {
+                console.error('getSelectedText エラー:', error);
+                return '';
+            }
+        }
+        
+        // C#に通知
+        function notifyCSharp(action, data) {
+            try {
+                const message = {
+                    action: action,
+                    data: data,
+                    timestamp: new Date().toISOString()
+                };
+                
+                // Windows WebView2の場合
+                if (window.chrome && window.chrome.webview) {
+                    window.chrome.webview.postMessage(message);
+                    return;
+                }
+                
+                // フォールバック
+                console.log('C#通知:', message);
+                
+            } catch (error) {
+                console.error('C#通知エラー:', error);
+            }
+        }
+        
+        // 選択をクリア
+        function clearSelection() {
+            try {
+                if (window.getSelection) {
+                    window.getSelection().removeAllRanges();
+                } else if (document.selection) {
+                    document.selection.empty();
+                }
+                updateDebug('選択クリア完了');
+            } catch (error) {
+                console.error('clearSelection エラー:', error);
+            }
+        }
+        
+        // ページテキストをクリア
+        function clearPageText() {
+            textContainer.innerHTML = '';
+            updateStatus('テキストクリア');
+            updateDebug('ページテキストクリア');
+        }
+        
+        // 初期化完了
+        updateStatus('PDFテキスト選択モード - 準備完了');
+        updateDebug('HTML初期化完了');
+        
+        console.log('PDFテキスト選択HTML初期化完了');
+    </script>
+</body>
+</html> 

@@ -1,0 +1,155 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+	<PropertyGroup>
+		<TargetFrameworks Condition="$([MSBuild]::IsOSPlatform('windows'))">net9.0-windows10.0.19041.0</TargetFrameworks>
+		<!-- Uncomment to also build the tizen app. You will need to install tizen by following this: https://github.com/Samsung/Tizen.NET -->
+		<!-- <TargetFrameworks>$(TargetFrameworks);net9.0-tizen</TargetFrameworks> -->
+
+		<!-- Note for MacCatalyst:
+		The default runtime is maccatalyst-x64, except in Release config, in which case the default is maccatalyst-x64;maccatalyst-arm64.
+		When specifying both architectures, use the plural <RuntimeIdentifiers> instead of the singular <RuntimeIdentifier>.
+		The Mac App Store will NOT accept apps with ONLY maccatalyst-arm64 indicated;
+		either BOTH runtimes must be indicated or ONLY macatalyst-x64. -->
+		<!-- For example: <RuntimeIdentifiers>maccatalyst-x64;maccatalyst-arm64</RuntimeIdentifiers> -->
+
+		<OutputType>Exe</OutputType>
+		<RootNamespace>Flashnote</RootNamespace>
+		<UseMaui>true</UseMaui>
+		<SingleProject>true</SingleProject>
+		<ImplicitUsings>enable</ImplicitUsings>
+		<Nullable>enable</Nullable>
+		<NoWarn>$(NoWarn);CS8767;CS8625;CS8612;CS0618;MSB3277;NU1701;CS8618;CS8622;CS8604;CS8602;CS8603;CS8600;CS8601;CS8619;CS8620;CS8605;CS1998;CS0612;CS0219;CS0169;CS0414</NoWarn>
+
+		<!-- Display name -->
+		<ApplicationTitle>Flashnote</ApplicationTitle>
+
+		<!-- App Identifier -->
+		<ApplicationId>winmac924.flashnote.maui</ApplicationId>
+
+		<!-- Versions - 自動アップデート対応 -->
+		<ApplicationDisplayVersion>2.0.0</ApplicationDisplayVersion>
+		<ApplicationVersion>200</ApplicationVersion>
+		<VersionPrefix>2.0.0</VersionPrefix>
+		<VersionSuffix Condition="'$(Configuration)' == 'Debug'">dev</VersionSuffix>
+		<AssemblyVersion>2.0.0.0</AssemblyVersion>
+		<FileVersion>2.0.0.0</FileVersion>
+
+		<!-- Windows配布設定 - EXE形式 -->
+		<WindowsPackageType>None</WindowsPackageType>
+		<WindowsAppSDKSelfContained>true</WindowsAppSDKSelfContained>
+		<PublishSingleFile>true</PublishSingleFile>
+		<SelfContained>true</SelfContained>
+		<UseAppHost>true</UseAppHost>
+		<IncludeNativeLibrariesForSelfExtract>true</IncludeNativeLibrariesForSelfExtract>
+		<PublishTrimmed>false</PublishTrimmed>
+
+		<!-- MSIX設定 -->
+		<PackageCertificateKeyFile Condition="$([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) == 'windows'">Package_TemporaryKey.pfx</PackageCertificateKeyFile>
+		<PackageCertificatePassword Condition="$([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) == 'windows'">password</PackageCertificatePassword>
+		<GenerateAppInstallerFile>false</GenerateAppInstallerFile>
+		<AppxPackageSigningEnabled>true</AppxPackageSigningEnabled>
+		<AppxBundle>Always</AppxBundle>
+		<AppxBundlePlatforms>x64</AppxBundlePlatforms>
+
+		<SupportedOSPlatformVersion Condition="$([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) == 'ios'">15.0</SupportedOSPlatformVersion>
+		<SupportedOSPlatformVersion Condition="$([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) == 'maccatalyst'">15.0</SupportedOSPlatformVersion>
+		<SupportedOSPlatformVersion Condition="$([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) == 'android'">21.0</SupportedOSPlatformVersion>
+		<SupportedOSPlatformVersion Condition="$([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) == 'windows'">10.0.17763.0</SupportedOSPlatformVersion>
+		<TargetPlatformMinVersion Condition="$([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) == 'windows'">10.0.17763.0</TargetPlatformMinVersion>
+		<SupportedOSPlatformVersion Condition="$([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) == 'tizen'">6.5</SupportedOSPlatformVersion>
+		<Platforms>AnyCPU;x64</Platforms>
+	</PropertyGroup>
+
+	<ItemGroup>
+		<!-- App Icon -->
+		<MauiIcon Include="Resources\AppIcon\appicon.svg" />
+
+		<!-- Splash Screen -->
+		<MauiSplashScreen Include="Resources\Splash\splash.svg" Color="#512BD4" BaseSize="128,128" />
+
+		<!-- Images -->
+		<MauiImage Include="Resources\Images\*" />
+		<MauiImage Update="Resources\Images\dotnet_bot.png" Resize="True" BaseSize="300,185" />
+
+		<!-- Custom Fonts -->
+		<MauiFont Include="Resources\Fonts\*" />
+		<MauiFont Update="Resources\Fonts\FluentUI-Regular.ttf" LogicalName="FluentUI-Regular.ttf" />
+
+		<!-- Raw Assets (also remove the "Resources\Raw" prefix) -->
+		<MauiAsset Include="Resources\Raw\**" LogicalName="%(RecursiveDir)%(Filename)%(Extension)" />
+		
+		<!-- Configuration Files -->
+		<MauiAsset Include="appsettings.json" LogicalName="appsettings.json" Condition="Exists('appsettings.json')" />
+	</ItemGroup>
+
+	<ItemGroup>
+		<PackageReference Include="AathifMahir.Maui.MauiIcons.Fluent" Version="4.0.0" />
+		<PackageReference Include="Azure.Storage.Blobs" Version="12.24.1" />
+		<PackageReference Include="FirebaseAdmin" Version="3.2.0" />
+		<PackageReference Include="FirebaseAuthentication.net" Version="4.1.0" />
+		<PackageReference Include="Microsoft.Data.Sqlite" Version="9.0.6" />
+		<PackageReference Include="Microsoft.Maui.Controls" Version="9.0.80" />
+		<PackageReference Include="Microsoft.Extensions.Logging.Debug" Version="9.0.6" />
+		<PackageReference Include="Microsoft.Extensions.Http" Version="9.0.6" />
+		<PackageReference Include="Microsoft.UI.Xaml" Version="2.8.7" />
+		<PackageReference Include="PdfiumViewer" Version="2.13.0" />
+		<PackageReference Include="PdfiumViewer.Native.x86_64.v8-xfa" Version="2018.4.8.256" />
+		<PackageReference Include="Plugin.Maui.KeyListener" Version="1.0.0-preview1" />
+		<PackageReference Include="SkiaSharp" Version="3.119.0" />
+		<PackageReference Include="SkiaSharp.Views" Version="3.119.0" />
+		<PackageReference Include="SkiaSharp.Views.Maui.Controls" Version="3.119.0" />
+		<PackageReference Include="SkiaSharp.Views.Maui.Core" Version="3.119.0" />
+		<PackageReference Include="sqlite-net-pcl" Version="1.9.172" />
+		<PackageReference Include="System.Data.SQLite.Core" Version="1.0.119" />
+		<PackageReference Include="System.Drawing.Common" Version="9.0.6" />
+		<PackageReference Include="ZstdNet" Version="1.4.5" />
+	</ItemGroup>
+
+	<ItemGroup>
+	  <MauiXaml Update="Add.xaml">
+	    <Generator>MSBuild:Compile</Generator>
+	  </MauiXaml>
+	  <MauiXaml Update="Confirmation.xaml">
+	    <Generator>MSBuild:Compile</Generator>
+	  </MauiXaml>
+	  <MauiXaml Update="DropdownMenu.xaml">
+	    <Generator>MSBuild:Compile</Generator>
+	  </MauiXaml>
+	  <MauiXaml Update="NotePage.xaml">
+	    <Generator>MSBuild:Compile</Generator>
+	  </MauiXaml>
+	  <MauiXaml Update="Qa.xaml">
+	    <Generator>MSBuild:Compile</Generator>
+	  </MauiXaml>
+	</ItemGroup>
+
+	<ItemGroup>
+	  <Folder Include="Views\" />
+	</ItemGroup>
+
+</Project>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

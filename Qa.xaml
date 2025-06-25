@@ -1,0 +1,188 @@
+<ContentPage xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+             x:Class="Flashnote.Qa"
+             xmlns:skia="clr-namespace:SkiaSharp.Views.Maui.Controls;assembly=SkiaSharp.Views.Maui.Controls"
+             xmlns:local="clr-namespace:Flashnote">
+
+    <ContentPage.Resources>
+        <ResourceDictionary>
+            <!-- ダークモード対応の色定義 -->
+            <Color x:Key="BackgroundLight">#FFFFFF</Color>
+            <Color x:Key="BackgroundDark">#1E1E1E</Color>
+            <Color x:Key="TextLight">#000000</Color>
+            <Color x:Key="TextDark">#FFFFFF</Color>
+            <Color x:Key="BorderLight">#CCCCCC</Color>
+            <Color x:Key="BorderDark">#555555</Color>
+            <Color x:Key="CanvasBackgroundLight">#FFFFFF</Color>
+            <Color x:Key="CanvasBackgroundDark">#2D2D30</Color>
+        </ResourceDictionary>
+    </ContentPage.Resources>
+
+    <Grid>
+        <Grid.BackgroundColor>
+            <AppThemeBinding Light="{StaticResource BackgroundLight}" 
+                            Dark="{StaticResource BackgroundDark}" />
+        </Grid.BackgroundColor>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="*"/>
+            <!-- 上部コンテンツを可変サイズに -->
+            <RowDefinition Height="Auto"/>
+            <!-- ボタンの高さ分 -->
+        </Grid.RowDefinitions>
+        
+        <!-- 問題表示エリア（スクロール対応） -->
+        <ScrollView Grid.Row="0" Margin="0,0,0,10">
+            <VerticalStackLayout Spacing="10" Padding="10">
+                <!-- 問題表示エリア -->
+                <Grid x:Name="QuestionContainer">
+
+                    <!-- 基本・穴埋めカード -->
+                    <VerticalStackLayout x:Name="BasicCardLayout"
+                                         IsVisible="False"
+                                         Spacing="10">
+                        <Frame Padding="10" HasShadow="False" CornerRadius="8">
+                            <Frame.BackgroundColor>
+                                <AppThemeBinding Light="{StaticResource BackgroundLight}" 
+                                                Dark="{StaticResource BackgroundDark}" />
+                            </Frame.BackgroundColor>
+                            <Frame.BorderColor>
+                                <AppThemeBinding Light="{StaticResource BorderLight}" 
+                                                Dark="{StaticResource BorderDark}" />
+                            </Frame.BorderColor>
+                            <local:RichTextLabel x:Name="FrontPreviewLabel"
+                                                FontSize="16"
+                                                LineBreakMode="WordWrap"/>
+                        </Frame>
+                        <Frame Padding="10" HasShadow="False" CornerRadius="8"
+                               x:Name="BackPreviewFrame"
+                               IsVisible="False">
+                            <Frame.BackgroundColor>
+                                <AppThemeBinding Light="{StaticResource BackgroundLight}" 
+                                                Dark="{StaticResource BackgroundDark}" />
+                            </Frame.BackgroundColor>
+                            <Frame.BorderColor>
+                                <AppThemeBinding Light="{StaticResource BorderLight}" 
+                                                Dark="{StaticResource BorderDark}" />
+                            </Frame.BorderColor>
+                            <local:RichTextLabel x:Name="BackPreviewLabel"
+                                                FontSize="16"
+                                                LineBreakMode="WordWrap"/>
+                        </Frame>
+                    </VerticalStackLayout>
+
+                    <!-- 選択肢カード -->
+                    <VerticalStackLayout x:Name="ChoiceCardLayout"
+                                         IsVisible="False"
+                                         Spacing="10">
+                        <Frame Padding="10" HasShadow="False" CornerRadius="8">
+                            <Frame.BackgroundColor>
+                                <AppThemeBinding Light="{StaticResource BackgroundLight}" 
+                                                Dark="{StaticResource BackgroundDark}" />
+                            </Frame.BackgroundColor>
+                            <Frame.BorderColor>
+                                <AppThemeBinding Light="{StaticResource BorderLight}" 
+                                                Dark="{StaticResource BorderDark}" />
+                            </Frame.BorderColor>
+                            <local:RichTextLabel x:Name="ChoiceQuestionLabel"
+                                                FontSize="16"
+                                                LineBreakMode="WordWrap"/>
+                        </Frame>
+                        <VerticalStackLayout x:Name="ChoiceContainer" Spacing="5" Padding="10"/>
+                        <Frame Padding="10" HasShadow="False" CornerRadius="8"
+                               x:Name="ChoiceExplanationFrame"
+                               IsVisible="False">
+                            <Frame.BackgroundColor>
+                                <AppThemeBinding Light="{StaticResource BackgroundLight}" 
+                                                Dark="{StaticResource BackgroundDark}" />
+                            </Frame.BackgroundColor>
+                            <Frame.BorderColor>
+                                <AppThemeBinding Light="{StaticResource BorderLight}" 
+                                                Dark="{StaticResource BorderDark}" />
+                            </Frame.BorderColor>
+                            <local:RichTextLabel x:Name="ChoiceExplanationLabel"
+                                                FontSize="16"
+                                                LineBreakMode="WordWrap"/>
+                        </Frame>
+                    </VerticalStackLayout>
+
+                    <!-- 画像穴埋めカード -->
+                    <VerticalStackLayout x:Name="ImageFillCardLayout"
+                                         IsVisible="False"
+                                         Spacing="10">
+                        <Frame Padding="5" HasShadow="False" CornerRadius="8">
+                            <Frame.BackgroundColor>
+                                <AppThemeBinding Light="{StaticResource CanvasBackgroundLight}" 
+                                                Dark="{StaticResource CanvasBackgroundDark}" />
+                            </Frame.BackgroundColor>
+                            <Frame.BorderColor>
+                                <AppThemeBinding Light="{StaticResource BorderLight}" 
+                                                Dark="{StaticResource BorderDark}" />
+                            </Frame.BorderColor>
+                            <skia:SKCanvasView x:Name="CanvasView"
+                                               HeightRequest="300"
+                                               WidthRequest="500"
+                                               IsEnabled="True"
+                                               PaintSurface="OnCanvasViewPaintSurface"
+                                               EnableTouchEvents="False"/>
+                        </Frame>
+                    </VerticalStackLayout>
+                </Grid>
+            </VerticalStackLayout>
+        </ScrollView>
+        
+        <!-- 正解・不正解ボタン（固定位置） -->
+        <Frame Grid.Row="1" 
+               Padding="10,15"
+               HasShadow="True"
+               CornerRadius="0">
+            <Frame.BackgroundColor>
+                <AppThemeBinding Light="{StaticResource BackgroundLight}" 
+                                Dark="{StaticResource BackgroundDark}" />
+            </Frame.BackgroundColor>
+            <Frame.BorderColor>
+                <AppThemeBinding Light="{StaticResource BorderLight}" 
+                                Dark="{StaticResource BorderDark}" />
+            </Frame.BorderColor>
+            <HorizontalStackLayout HorizontalOptions="Center"
+                                   VerticalOptions="Center"
+                                   Spacing="15">
+                <Button x:Name="ShowAnswerButton"
+                        Text="解答を表示"
+                        Clicked="OnShowAnswerClicked"
+                        HorizontalOptions="Center"
+                        VerticalOptions="Center"
+                        WidthRequest="120"/>
+
+                <Button x:Name="Correct"
+                        Text="正解"
+                        Clicked="OnCorrectClicked"
+                        IsVisible="False"
+                        WidthRequest="80"
+                        BackgroundColor="Green"
+                        TextColor="White"/>
+                <Grid IsVisible="False" x:Name="SeparatorGrid">
+                    <BoxView HeightRequest="2"
+                             WidthRequest="30"
+                             VerticalOptions="Center">
+                        <BoxView.BackgroundColor>
+                            <AppThemeBinding Light="{StaticResource BorderLight}" 
+                                            Dark="{StaticResource BorderDark}" />
+                        </BoxView.BackgroundColor>
+                    </BoxView>
+                </Grid>                
+                <Button x:Name="Incorrect"
+                        Text="不正解"
+                        Clicked="OnIncorrectClicked"
+                        IsVisible="False"
+                        WidthRequest="80"
+                        BackgroundColor="Red"
+                        TextColor="White"/>
+                <Button x:Name="NextButton"
+                        Text="次へ"
+                        Clicked="OnNextClicked"
+                        IsVisible="False"
+                        WidthRequest="80"/>
+            </HorizontalStackLayout>
+        </Frame>
+    </Grid>
+</ContentPage>

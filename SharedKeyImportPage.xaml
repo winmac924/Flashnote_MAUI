@@ -1,0 +1,69 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<ContentPage xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+             x:Class="Flashnote.SharedKeyImportPage">
+    
+    <ScrollView>
+        <StackLayout Padding="20" Spacing="20">
+            
+            <Label Text="共有キーからノートをインポート" 
+                   FontSize="24" 
+                   FontAttributes="Bold" 
+                   HorizontalOptions="Center"
+                   Margin="0,20,0,20"/>
+            
+            <Label Text="共有されたノートにアクセスするための共有キーを入力してください。" 
+                   FontSize="16" 
+                   HorizontalOptions="Center"
+                   Margin="0,0,0,20"/>
+            
+            <Frame BackgroundColor="LightGray" Padding="15" CornerRadius="10">
+                <StackLayout Spacing="10">
+                    <Label Text="共有キー" FontSize="16" FontAttributes="Bold"/>
+                    <Entry x:Name="ShareKeyEntry" 
+                           Placeholder="共有キーを入力してください..."
+                           FontSize="16"/>
+                </StackLayout>
+            </Frame>
+            
+            <Frame BackgroundColor="LightBlue" Padding="15" CornerRadius="10" IsVisible="False" x:Name="InfoFrame">
+                <StackLayout Spacing="5">
+                    <Label Text="ノート情報" FontSize="16" FontAttributes="Bold"/>
+                    <Label x:Name="NoteInfoLabel" FontSize="14"/>
+                </StackLayout>
+            </Frame>
+            
+            <StackLayout Orientation="Horizontal" HorizontalOptions="FillAndExpand" Spacing="10">
+                <Button Text="キャンセル" 
+                        BackgroundColor="Gray" 
+                        TextColor="White"
+                        HorizontalOptions="FillAndExpand"
+                        Clicked="OnCancelClicked"/>
+                        
+                <Button Text="プレビュー" 
+                        BackgroundColor="Orange" 
+                        TextColor="White"
+                        HorizontalOptions="FillAndExpand"
+                        Clicked="OnPreviewClicked"/>
+                        
+                <Button Text="インポート" 
+                        BackgroundColor="Green" 
+                        TextColor="White"
+                        HorizontalOptions="FillAndExpand"
+                        Clicked="OnImportClicked"/>
+            </StackLayout>
+            
+            <ActivityIndicator x:Name="LoadingIndicator" 
+                             IsVisible="False" 
+                             IsRunning="False"
+                             HorizontalOptions="Center"
+                             Margin="0,20,0,0"/>
+                             
+            <Label x:Name="StatusLabel" 
+                   Text="" 
+                   HorizontalOptions="Center"
+                   FontSize="14"
+                   TextColor="Red"/>
+        </StackLayout>
+    </ScrollView>
+</ContentPage> 

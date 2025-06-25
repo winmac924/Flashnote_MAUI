@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<ContentView xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+             x:Class="Flashnote.DropdownMenu"
+             BackgroundColor="Transparent">
+    <Frame Padding="5" HasShadow="True" CornerRadius="10"
+           BackgroundColor="White"
+           VerticalOptions="Start" HorizontalOptions="Start">
+        <VerticalStackLayout>
+            <Button Text="名前の変更" Clicked="OnRenameClicked"/>
+            <Button Text="書き出す" Clicked="OnExportClicked"/>
+            <Button Text="移動" Clicked="OnMoveClicked"/>
+            <Button Text="共有設定" Clicked="OnShareClicked"/>
+            <Button Text="ノートの削除" Clicked="OnDeleteClicked"/>
+        </VerticalStackLayout>
+    </Frame>
+</ContentView>

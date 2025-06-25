@@ -1,0 +1,321 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<ContentPage xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+             xmlns:skia="clr-namespace:SkiaSharp.Views.Maui.Controls;assembly=SkiaSharp.Views.Maui.Controls"
+             xmlns:local="clr-namespace:Flashnote"
+             x:Class="Flashnote.Edit">
+
+    <ContentPage.Resources>
+        <ResourceDictionary>
+            <!-- ダークモード対応の色定義 -->
+            <Color x:Key="HeaderBackgroundLight">#F0F0F0</Color>
+            <Color x:Key="HeaderBackgroundDark">#2D2D30</Color>
+            <Color x:Key="HeaderTextLight">#000000</Color>
+            <Color x:Key="HeaderTextDark">#FFFFFF</Color>
+            <Color x:Key="BackgroundLight">#FFFFFF</Color>
+            <Color x:Key="BackgroundDark">#1E1E1E</Color>
+            <Color x:Key="SearchResultTextLight">#0066CC</Color>
+            <Color x:Key="SearchResultTextDark">#4DA6FF</Color>
+        </ResourceDictionary>
+    </ContentPage.Resources>
+
+    <Grid RowDefinitions="Auto,*">
+        <!-- 上部：タイトルと検索エリア -->
+        <Grid Grid.Row="0" Padding="15,10" ColumnSpacing="15">
+            <Grid.BackgroundColor>
+                <AppThemeBinding Light="{StaticResource HeaderBackgroundLight}" 
+                                Dark="{StaticResource HeaderBackgroundDark}" />
+            </Grid.BackgroundColor>
+            <Grid ColumnDefinitions="Auto,*,Auto,Auto" ColumnSpacing="10">
+                <!-- タイトル -->
+                <Label Grid.Column="0"
+                       Text="カードの編集"
+                       FontSize="20"
+                       FontAttributes="Bold"
+                       VerticalOptions="Center">
+                    <Label.TextColor>
+                        <AppThemeBinding Light="{StaticResource HeaderTextLight}" 
+                                        Dark="{StaticResource HeaderTextDark}" />
+                    </Label.TextColor>
+                </Label>
+
+                <!-- 検索バー -->
+                <SearchBar Grid.Column="1"
+                           x:Name="CardSearchBar"
+                           Placeholder="カードを検索..."
+                           TextChanged="OnSearchTextChanged"
+                           HorizontalOptions="FillAndExpand"
+                           VerticalOptions="Center"/>
+
+                <!-- クリアボタン -->
+                <Button Grid.Column="2"
+                        Text="クリア"
+                        Clicked="OnClearSearchClicked"
+                        VerticalOptions="Center"
+                        FontSize="14"
+                        Padding="10,5"/>
+
+                <!-- 検索結果表示 -->
+                <Label Grid.Column="3"
+                       x:Name="SearchResultLabel"
+                       Text=""
+                       VerticalOptions="Center"
+                       FontSize="14"
+                       MinimumWidthRequest="80">
+                    <Label.TextColor>
+                        <AppThemeBinding Light="{StaticResource SearchResultTextLight}" 
+                                        Dark="{StaticResource SearchResultTextDark}" />
+                    </Label.TextColor>
+                </Label>
+            </Grid>
+        </Grid>
+
+        <!-- 下部：メインコンテンツ -->
+        <Grid Grid.Row="1" ColumnDefinitions="*,*">
+            <Grid.BackgroundColor>
+                <AppThemeBinding Light="{StaticResource BackgroundLight}" 
+                                Dark="{StaticResource BackgroundDark}" />
+            </Grid.BackgroundColor>
+            <!-- 左側：カードリスト -->
+            <Grid Grid.Column="0" RowDefinitions="Auto,*">
+                <!-- ヘッダー -->
+                <VerticalStackLayout Grid.Row="0" Padding="10" Spacing="10">
+                    <Label x:Name="NoteTitleLabel"
+                       Text="ノート名"
+                       FontSize="20"
+                       FontAttributes="Bold"
+                       HorizontalOptions="Center">
+                        <Label.TextColor>
+                            <AppThemeBinding Light="{StaticResource HeaderTextLight}" 
+                                        Dark="{StaticResource HeaderTextDark}" />
+                        </Label.TextColor>
+                    </Label>
+                    <Label x:Name="TotalCardsLabel"
+                       Text="カード枚数: 0"
+                       FontSize="16"
+                       HorizontalOptions="Center">
+                        <Label.TextColor>
+                            <AppThemeBinding Light="{StaticResource HeaderTextLight}" 
+                                        Dark="{StaticResource HeaderTextDark}" />
+                        </Label.TextColor>
+                    </Label>
+                </VerticalStackLayout>
+
+                <!-- カードリスト -->
+                <CollectionView Grid.Row="1"
+                            x:Name="CardsCollectionView"
+                            SelectionMode="Single"
+                            SelectionChanged="OnCardSelected">
+                    <CollectionView.ItemTemplate>
+                        <DataTemplate>
+                            <Frame Margin="10"
+                               Padding="10"
+                               CornerRadius="5">
+                                <Frame.BorderColor>
+                                    <AppThemeBinding Light="Gray" Dark="#555555" />
+                                </Frame.BorderColor>
+                                <Frame.BackgroundColor>
+                                    <AppThemeBinding Light="White" Dark="#2D2D30" />
+                                </Frame.BackgroundColor>
+                                <Grid RowDefinitions="Auto,Auto,Auto" ColumnDefinitions="*,Auto">
+                                    <!-- 表面/問題文 -->
+                                    <Label Grid.Row="0" Grid.Column="0"
+                                   Text="{Binding FrontText}"
+                                   FontSize="16"
+                                   LineBreakMode="TailTruncation">
+                                        <Label.TextColor>
+                                            <AppThemeBinding Light="Black" Dark="White" />
+                                        </Label.TextColor>
+                                    </Label>
+
+                                    <!-- 画像情報 -->
+                                    <Label Grid.Row="1" Grid.Column="0"
+                                   Text="{Binding ImageInfo}"
+                                   FontSize="14"
+                                   LineBreakMode="TailTruncation"
+                                   IsVisible="{Binding HasImage}">
+                                        <Label.TextColor>
+                                            <AppThemeBinding Light="Gray" Dark="#CCCCCC" />
+                                        </Label.TextColor>
+                                    </Label>
+
+                                    <!-- 最終更新日時 -->
+                                    <Label Grid.Row="2" Grid.Column="0"
+                                   Text="{Binding LastModified}"
+                                   FontSize="12">
+                                        <Label.TextColor>
+                                            <AppThemeBinding Light="Gray" Dark="#CCCCCC" />
+                                        </Label.TextColor>
+                                    </Label>
+                                </Grid>
+                            </Frame>
+                        </DataTemplate>
+                    </CollectionView.ItemTemplate>
+                </CollectionView>
+            </Grid>
+
+            <!-- 右側：カード編集 -->
+            <ScrollView Grid.Column="1">
+                <ScrollView.BackgroundColor>
+                    <AppThemeBinding Light="{StaticResource BackgroundLight}" 
+                                Dark="{StaticResource BackgroundDark}" />
+                </ScrollView.BackgroundColor>
+                <VerticalStackLayout Padding="10" Spacing="10">
+                    <!-- カードタイプ選択 -->
+                    <Picker x:Name="CardTypePicker"
+                        Title="カードタイプを選択"
+                        SelectedIndexChanged="OnCardTypeChanged">
+                        <Picker.Items>
+                            <x:String>基本・穴埋め</x:String>
+                            <x:String>選択肢</x:String>
+                            <x:String>画像穴埋め</x:String>
+                        </Picker.Items>
+                    </Picker>
+
+                    <!-- 基本・穴埋めカード -->
+                    <VerticalStackLayout x:Name="BasicCardLayout" Spacing="10">
+                        <Label Text="表面" FontAttributes="Bold">
+                            <Label.TextColor>
+                                <AppThemeBinding Light="{StaticResource HeaderTextLight}" 
+                                            Dark="{StaticResource HeaderTextDark}" />
+                            </Label.TextColor>
+                        </Label>
+                        <Grid ColumnDefinitions="*,Auto">
+                            <Editor x:Name="FrontTextEditor"
+                                HeightRequest="100"
+                                TextChanged="FrontOnTextChanged">
+                                <Editor.BackgroundColor>
+                                    <AppThemeBinding Light="White" Dark="#2D2D30" />
+                                </Editor.BackgroundColor>
+                                <Editor.TextColor>
+                                    <AppThemeBinding Light="Black" Dark="White" />
+                                </Editor.TextColor>
+                            </Editor>
+                            <Button Grid.Column="1"
+                                Text="画像"
+                                Clicked="FrontOnAddImageClicked"
+                                VerticalOptions="Start"/>
+                        </Grid>
+                        <local:RichTextLabel x:Name="FrontPreviewLabel"
+                                         VerticalOptions="Start"
+                                         HorizontalOptions="Fill"/>
+
+                        <Label Text="裏面" FontAttributes="Bold">
+                            <Label.TextColor>
+                                <AppThemeBinding Light="{StaticResource HeaderTextLight}" 
+                                            Dark="{StaticResource HeaderTextDark}" />
+                            </Label.TextColor>
+                        </Label>
+                        <Grid ColumnDefinitions="*,Auto">
+                            <Editor x:Name="BackTextEditor"
+                                HeightRequest="100"
+                                TextChanged="BackOnTextChanged">
+                                <Editor.BackgroundColor>
+                                    <AppThemeBinding Light="White" Dark="#2D2D30" />
+                                </Editor.BackgroundColor>
+                                <Editor.TextColor>
+                                    <AppThemeBinding Light="Black" Dark="White" />
+                                </Editor.TextColor>
+                            </Editor>
+                            <Button Grid.Column="1"
+                                Text="画像"
+                                Clicked="BackOnAddImageClicked"
+                                VerticalOptions="Start"/>
+                        </Grid>
+                        <local:RichTextLabel x:Name="BackPreviewLabel"
+                                         VerticalOptions="Start"
+                                         HorizontalOptions="Fill"/>
+                    </VerticalStackLayout>
+
+                    <!-- 選択肢カード -->
+                    <VerticalStackLayout x:Name="MultipleChoiceLayout" IsVisible="False" Spacing="10">
+                        <Label Text="問題文" FontAttributes="Bold">
+                            <Label.TextColor>
+                                <AppThemeBinding Light="{StaticResource HeaderTextLight}" 
+                                            Dark="{StaticResource HeaderTextDark}" />
+                            </Label.TextColor>
+                        </Label>
+                        <Grid ColumnDefinitions="*,Auto">
+                            <Editor x:Name="ChoiceQuestion"
+                                HeightRequest="100">
+                                <Editor.BackgroundColor>
+                                    <AppThemeBinding Light="White" Dark="#2D2D30" />
+                                </Editor.BackgroundColor>
+                                <Editor.TextColor>
+                                    <AppThemeBinding Light="Black" Dark="White" />
+                                </Editor.TextColor>
+                            </Editor>
+                            <Button Grid.Column="1"
+                                Text="画像"
+                                Clicked="ChoiceQuestionOnAddImageClicked"
+                                VerticalOptions="Start"/>
+                        </Grid>
+                        <local:RichTextLabel x:Name="ChoicePreviewLabel"
+                                         VerticalOptions="Start"
+                                         HorizontalOptions="Fill"/>
+
+                        <Label Text="解説" FontAttributes="Bold">
+                            <Label.TextColor>
+                                <AppThemeBinding Light="{StaticResource HeaderTextLight}" 
+                                            Dark="{StaticResource HeaderTextDark}" />
+                            </Label.TextColor>
+                        </Label>
+                        <Grid ColumnDefinitions="*,Auto">
+                            <Editor x:Name="ChoiceQuestionExplanation"
+                                HeightRequest="100">
+                                <Editor.BackgroundColor>
+                                    <AppThemeBinding Light="White" Dark="#2D2D30" />
+                                </Editor.BackgroundColor>
+                                <Editor.TextColor>
+                                    <AppThemeBinding Light="Black" Dark="White" />
+                                </Editor.TextColor>
+                            </Editor>
+                            <Button Grid.Column="1"
+                                Text="画像"
+                                Clicked="ChoiceExplanationOnAddImageClicked"
+                                VerticalOptions="Start"/>
+                        </Grid>
+                        <local:RichTextLabel x:Name="ChoiceExplanationPreviewLabel"
+                                         VerticalOptions="Start"
+                                         HorizontalOptions="Fill"/>
+
+                        <Label Text="選択肢" FontAttributes="Bold">
+                            <Label.TextColor>
+                                <AppThemeBinding Light="{StaticResource HeaderTextLight}" 
+                                            Dark="{StaticResource HeaderTextDark}" />
+                            </Label.TextColor>
+                        </Label>
+                        <VerticalStackLayout x:Name="ChoicesContainer" Spacing="5"/>
+                        <Button Text="選択肢を追加"
+                            Clicked="OnAddChoice"
+                            HorizontalOptions="Start"/>
+                    </VerticalStackLayout>
+
+                    <!-- 画像穴埋めカード -->
+                    <VerticalStackLayout x:Name="ImageFillLayout" IsVisible="False" Spacing="10">
+                        <Button Text="画像を選択"
+                            Clicked="OnSelectImage"
+                            HorizontalOptions="Fill"/>
+                        <Frame CornerRadius="5"
+                           Padding="0">
+                            <Frame.BackgroundColor>
+                                <AppThemeBinding Light="White" Dark="#2D2D30" />
+                            </Frame.BackgroundColor>
+                            <Frame.BorderColor>
+                                <AppThemeBinding Light="Gray" Dark="#555555" />
+                            </Frame.BorderColor>
+                            <skia:SKCanvasView x:Name="CanvasView"
+                                           WidthRequest="400"
+                                           HeightRequest="300"
+                                           HorizontalOptions="Fill"
+                                           IsEnabled="True"
+                                           PaintSurface="OnCanvasViewPaintSurface"
+                                           EnableTouchEvents="True"
+                                           Touch="OnCanvasTouch"/>
+                        </Frame>
+                    </VerticalStackLayout>
+                </VerticalStackLayout>
+            </ScrollView>
+        </Grid>
+    </Grid>
+</ContentPage> 

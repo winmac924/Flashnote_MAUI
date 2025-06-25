@@ -1,0 +1,81 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<ContentPage x:Class="Flashnote.UpdateProgressPage"
+             xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+             Title="アップデート中"
+             BackgroundColor="{DynamicResource PageBackgroundColor}">
+    <Grid>
+        <!-- 背景のオーバーレイ -->
+        <BoxView BackgroundColor="Black" Opacity="0.5" />
+        
+        <!-- メインコンテンツ -->
+        <Border BackgroundColor="{DynamicResource CardBackgroundColor}"
+                Stroke="{DynamicResource BorderColor}"
+                StrokeThickness="1"
+                Padding="30"
+                HorizontalOptions="Center"
+                VerticalOptions="Center"
+                MaximumWidthRequest="400">
+            <Border.StrokeShape>
+                <RoundRectangle CornerRadius="10" />
+            </Border.StrokeShape>
+            
+            <StackLayout Spacing="20">
+                <!-- タイトル -->
+                <Label x:Name="TitleLabel"
+                       Text="🚀 アップデート中"
+                       FontSize="24"
+                       FontAttributes="Bold"
+                       HorizontalOptions="Center"
+                       TextColor="{DynamicResource PrimaryTextColor}" />
+                
+                <!-- ステータステキスト -->
+                <Label x:Name="StatusLabel"
+                       Text="新しいバージョンをダウンロード中です..."
+                       FontSize="16"
+                       HorizontalOptions="Center"
+                       HorizontalTextAlignment="Center"
+                       TextColor="{DynamicResource SecondaryTextColor}" />
+                
+                <!-- 進捗バー -->
+                <StackLayout Spacing="10">
+                    <ProgressBar x:Name="ProgressBar"
+                                 Progress="0"
+                                 ProgressColor="{DynamicResource Primary}"
+                                 BackgroundColor="{DynamicResource Gray200}"
+                                 HeightRequest="8" />
+                    
+                    <Label x:Name="ProgressLabel"
+                           Text="0%"
+                           FontSize="14"
+                           HorizontalOptions="Center"
+                           TextColor="{DynamicResource SecondaryTextColor}" />
+                </StackLayout>
+                
+                <!-- アクティビティインジケーター -->
+                <ActivityIndicator x:Name="LoadingIndicator"
+                                   IsRunning="True"
+                                   Color="{DynamicResource Primary}"
+                                   HeightRequest="40"
+                                   WidthRequest="40"
+                                   HorizontalOptions="Center" />
+                
+                <!-- 詳細情報 -->
+                <Label x:Name="DetailLabel"
+                       Text=""
+                       FontSize="12"
+                       HorizontalOptions="Center"
+                       HorizontalTextAlignment="Center"
+                       TextColor="{DynamicResource SecondaryTextColor}" />
+                
+                <!-- キャンセルボタン（必要に応じて） -->
+                <Button x:Name="CancelButton"
+                        Text="キャンセル"
+                        BackgroundColor="{DynamicResource Gray300}"
+                        TextColor="{DynamicResource Gray900}"
+                        IsVisible="False"
+                        Clicked="OnCancelClicked" />
+            </StackLayout>
+        </Border>
+    </Grid>
+</ContentPage> 

@@ -1,0 +1,174 @@
+name: Build and Release Flashnote MAUI
+
+on:
+  push:
+    tags:
+      - 'v*'  # v1.0.0のようなタグでトリガー
+  workflow_dispatch:  # 手動実行も可能
+
+# GitHub Actionsの権限設定
+permissions:
+  contents: write
+  packages: write
+
+jobs:
+  build-windows:
+    runs-on: windows-latest
+    
+    env:
+      PROJECT_PATH: 'Flashnote_MAUI.csproj'
+      
+    steps:
+    - name: 📥 Checkout Repository
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+    
+    - name: 🔧 Setup .NET
+      uses: actions/setup-dotnet@v4
+      with:
+        dotnet-version: '9.0.x'
+    
+    - name: 🔐 Create appsettings.json from secrets
+      run: |
+        $appsettings = @{
+          "Firebase" = @{
+            "ApiKey" = "${{ secrets.FIREBASE_API_KEY }}"
+            "AuthDomain" = "${{ secrets.FIREBASE_AUTH_DOMAIN }}"
+          }
+          "AzureStorage" = @{
+            "ConnectionString" = "${{ secrets.AZURE_STORAGE_CONNECTION_STRING }}"
+          }
+        }
+        $appsettings | ConvertTo-Json -Depth 3 | Out-File -FilePath "appsettings.json" -Encoding UTF8
+        echo "✅ appsettings.json を作成しました"
+      shell: powershell
+      env:
+        FIREBASE_API_KEY: ${{ secrets.FIREBASE_API_KEY }}
+        FIREBASE_AUTH_DOMAIN: ${{ secrets.FIREBASE_AUTH_DOMAIN }}
+        AZURE_STORAGE_CONNECTION_STRING: ${{ secrets.AZURE_STORAGE_CONNECTION_STRING }}
+    
+    - name: 🔍 Extract Version from Tag
+      id: get_version
+      run: |
+        if ("${{ github.ref_type }}" -eq "tag") {
+          $version = "${{ github.ref_name }}" -replace "^v", ""
+          echo "VERSION=$version" >> $env:GITHUB_OUTPUT
+          echo "TAG_NAME=${{ github.ref_name }}" >> $env:GITHUB_OUTPUT
+        } else {
+          $version = "1.0.0-dev"
+          $tag = "v1.0.0-dev"
+          echo "VERSION=$version" >> $env:GITHUB_OUTPUT
+          echo "TAG_NAME=$tag" >> $env:GITHUB_OUTPUT
+        }
+        echo "Building version: $version"
+      shell: powershell
+      
+    - name: 🛠️ Restore Dependencies
+      run: dotnet restore ${{ env.PROJECT_PATH }}
+      
+    - name: 🏗️ Build Application
+      run: |
+        dotnet build ${{ env.PROJECT_PATH }} -c Release -f net9.0-windows10.0.19041.0 --no-restore
+        
+    - name: 📦 Publish Executable
+      run: |
+        dotnet publish ${{ env.PROJECT_PATH }} -c Release -f net9.0-windows10.0.19041.0 -r win-x64 --self-contained true -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -p:ApplicationDisplayVersion=${{ steps.get_version.outputs.VERSION }}
+        
+    - name: 🔍 Debug List Files
+      run: |
+        echo "=== Listing all files in bin directory ==="
+        Get-ChildItem -Path "bin" -Recurse | Select-Object FullName, Length
+        echo "=== End of file listing ==="
+      shell: powershell
+      
+    - name: 🔍 Find Executable Files
+      id: find_exe
+      run: |
+        # 複数のパスパターンを試す
+        $searchPaths = @(
+          "bin/Release/net9.0-windows10.0.19041.0/win-x64/publish/",
+          "bin\Release\net9.0-windows10.0.19041.0\win-x64\publish\",
+          "bin/Release/net9.0-windows10.0.19041.0/win-x64/",
+          "bin\Release\net9.0-windows10.0.19041.0\win-x64\"
+        )
+        
+        $exeFound = $false
+        foreach ($searchPath in $searchPaths) {
+          if (Test-Path $searchPath) {
+            echo "Searching in: $searchPath"
+            $exeFiles = Get-ChildItem -Path $searchPath -Filter "*.exe" -Recurse -ErrorAction SilentlyContinue
+            if ($exeFiles.Count -gt 0) {
+              $exePath = $exeFiles[0].FullName
+              $exeName = $exeFiles[0].Name
+              
+              # 相対パスに変換
+              $relativePath = $exePath -replace [regex]::Escape($PWD.Path + "\"), ""
+              $relativePath = $relativePath -replace "\\", "/"
+              
+              echo "EXE_PATH=$relativePath" >> $env:GITHUB_OUTPUT
+              echo "EXE_NAME=$exeName" >> $env:GITHUB_OUTPUT
+              echo "Found EXE: $exePath"
+              echo "Relative path: $relativePath"
+              
+              # ファイルサイズを確認
+              $fileSize = [math]::Round((Get-Item $exePath).Length / 1MB, 2)
+              echo "EXE_SIZE=$fileSize MB" >> $env:GITHUB_OUTPUT
+              echo "File size: $fileSize MB"
+              
+              $exeFound = $true
+              break
+            }
+          }
+        }
+        
+        if (-not $exeFound) {
+          echo "❌ No EXE files found in any search path!"
+          echo "Available files:"
+          Get-ChildItem -Path "bin" -Recurse -Filter "*.exe" | Select-Object FullName
+          exit 1
+        }
+      shell: powershell
+      
+    - name: 📝 Prepare Release Info
+      id: release_info
+      run: |
+        $version = "${{ steps.get_version.outputs.VERSION }}"
+        $fileSize = "${{ steps.find_exe.outputs.EXE_SIZE }}"
+        
+        # GitHub Outputに各要素を設定
+        echo "VERSION_INFO=$version" >> $env:GITHUB_OUTPUT
+        echo "FILE_SIZE_INFO=$fileSize" >> $env:GITHUB_OUTPUT
+      shell: powershell
+    
+    - name: 🏷️ Create GitHub Release
+      uses: softprops/action-gh-release@v2
+      with:
+        tag_name: ${{ steps.get_version.outputs.TAG_NAME }}
+        name: Flashnote MAUI ${{ steps.get_version.outputs.VERSION }}
+        body: |
+          ## 🚀 Flashnote MAUI ${{ steps.release_info.outputs.VERSION_INFO }}
+          
+          ### 📋 更新内容
+          - 共有キーの機能を追加
+          - 同期・共有キーからインポート時にノートが即時追加されない問題を修正
+          - カードの追加時に|で分離してしまう問題を修正
+          
+          ### 🔧 システム要件
+          - Windows 11(バージョン 24H2 以降)　（その他のバージョンでの動作は保証しません）
+          - ファイルサイズ: 約 ${{ steps.release_info.outputs.FILE_SIZE_INFO }}
+          
+          ---
+        files: ${{ steps.find_exe.outputs.EXE_PATH }}
+        draft: false
+        prerelease: ${{ contains(steps.get_version.outputs.VERSION, 'dev') || contains(steps.get_version.outputs.VERSION, 'alpha') || contains(steps.get_version.outputs.VERSION, 'beta') }}
+        token: ${{ secrets.GITHUB_TOKEN }}
+        
+    - name: ✅ Build Summary
+      run: |
+        echo "## 🎉 ビルド完了!" >> $GITHUB_STEP_SUMMARY
+        echo "- **バージョン**: ${{ steps.get_version.outputs.VERSION }}" >> $GITHUB_STEP_SUMMARY
+        echo "- **タグ**: ${{ steps.get_version.outputs.TAG_NAME }}" >> $GITHUB_STEP_SUMMARY
+        echo "- **実行ファイル**: ${{ steps.find_exe.outputs.EXE_NAME }}" >> $GITHUB_STEP_SUMMARY
+        echo "- **ファイルサイズ**: ${{ steps.find_exe.outputs.EXE_SIZE }}" >> $GITHUB_STEP_SUMMARY
+        echo "- **リリースURL**: ${{ github.server_url }}/${{ github.repository }}/releases/tag/${{ steps.get_version.outputs.TAG_NAME }}" >> $GITHUB_STEP_SUMMARY 
