@@ -16,7 +16,8 @@ namespace Flashnote
                 propertyChanged: OnShowAnswerChanged);
 
         public static readonly BindableProperty ImageFolderPathProperty =
-            BindableProperty.Create(nameof(ImageFolderPath), typeof(string), typeof(RichTextLabel), string.Empty);
+            BindableProperty.Create(nameof(ImageFolderPath), typeof(string), typeof(RichTextLabel), string.Empty,
+                propertyChanged: OnImageFolderPathChanged);
 
         public static readonly BindableProperty FontSizeProperty =
             BindableProperty.Create(nameof(FontSize), typeof(double), typeof(RichTextLabel), 18.0,
@@ -56,17 +57,26 @@ namespace Flashnote
             set => SetValue(LineBreakModeProperty, value);
         }
 
+        private StackLayout _container;
         private Label _label;
 
         public RichTextLabel()
         {
+            _container = new StackLayout
+            {
+                Orientation = StackOrientation.Vertical,
+                Spacing = 5
+            };
+            
             _label = new Label
             {
                 LineBreakMode = LineBreakMode.WordWrap,
                 VerticalOptions = LayoutOptions.Start,
                 HorizontalOptions = LayoutOptions.Fill,
             };
-            Content = _label;
+            
+            _container.Children.Add(_label);
+            Content = _container;
         }
 
         private static void OnRichTextChanged(BindableObject bindable, object oldValue, object newValue)
@@ -102,33 +112,206 @@ namespace Flashnote
             }
         }
 
+        private static void OnImageFolderPathChanged(BindableObject bindable, object oldValue, object newValue)
+        {
+            if (bindable is RichTextLabel label)
+            {
+                System.Diagnostics.Debug.WriteLine($"=== RichTextLabel OnImageFolderPathChanged ===");
+                System.Diagnostics.Debug.WriteLine($"oldValue: '{oldValue}'");
+                System.Diagnostics.Debug.WriteLine($"newValue: '{newValue}'");
+                label.ProcessRichText();
+            }
+        }
+
         private void ProcessRichText()
         {
-            if (_label == null) return;
+            if (_container == null || _label == null) return;
+            
+            // コンテナをクリア
+            _container.Children.Clear();
             _label.FormattedText = null;
             _label.Text = string.Empty;
 
             if (string.IsNullOrWhiteSpace(RichText))
             {
                 _label.Text = " ";
+                _container.Children.Add(_label);
                 return;
             }
 
             var text = RichText;
-            text = ProcessImageTags(text);
-
-            var formatted = new FormattedString();
-            var lines = text.Split(new[] { "\r\n", "\n", "\r" }, StringSplitOptions.None);
-            for (int i = 0; i < lines.Length; i++)
+            
+            // デバッグ情報を出力
+            System.Diagnostics.Debug.WriteLine($"=== RichTextLabel ProcessRichText ===");
+            System.Diagnostics.Debug.WriteLine($"ImageFolderPath: '{ImageFolderPath}'");
+            System.Diagnostics.Debug.WriteLine($"RichText: '{text}'");
+            
+            // ImageFolderPathが設定されていない場合は画像処理をスキップ
+            if (string.IsNullOrWhiteSpace(ImageFolderPath))
             {
-                if (i > 0)
+                System.Diagnostics.Debug.WriteLine("ImageFolderPathが空のため、画像処理をスキップします");
+                // 画像タグをプレースホルダーに置換
+                text = System.Text.RegularExpressions.Regex.Replace(text, @"<<img_\d{8}_\d{6}\.jpg>>", match =>
                 {
-                    formatted.Spans.Add(new Span { Text = "\n" });
+                    var imageFileName = match.Value.Trim('<', '>');
+                    return $"[画像: {imageFileName}]";
+                });
+                
+                // 通常のテキスト処理のみ実行
+                var textLabel = new Label
+                {
+                    LineBreakMode = LineBreakMode,
+                    VerticalOptions = LayoutOptions.Start,
+                    HorizontalOptions = LayoutOptions.Fill,
+                    FontSize = FontSize
+                };
+                
+                var formatted = new FormattedString();
+                var lines = text.Split(new[] { "\r\n", "\n", "\r" }, StringSplitOptions.None);
+                for (int i = 0; i < lines.Length; i++)
+                {
+                    if (i > 0)
+                    {
+                        formatted.Spans.Add(new Span { Text = "\n" });
+                    }
+                    ParseDecoratedText(lines[i], formatted);
                 }
-                ParseDecoratedText(lines[i], formatted);
+                textLabel.FormattedText = formatted;
+                _container.Children.Add(textLabel);
+                return;
             }
-            _label.FormattedText = formatted;
-            _label.FontSize = FontSize;
+            
+            // 画像タグを処理して画像とテキストを分離
+            var processedContent = ProcessImageTagsAndText(text);
+            
+            // 処理されたコンテンツを表示
+            foreach (var item in processedContent)
+            {
+                if (item is Image image)
+                {
+                    _container.Children.Add(image);
+                }
+                else if (item is string textContent && !string.IsNullOrEmpty(textContent))
+                {
+                    var textLabel = new Label
+                    {
+                        LineBreakMode = LineBreakMode,
+                        VerticalOptions = LayoutOptions.Start,
+                        HorizontalOptions = LayoutOptions.Fill,
+                        FontSize = FontSize
+                    };
+                    
+                    var formatted = new FormattedString();
+                    var lines = textContent.Split(new[] { "\r\n", "\n", "\r" }, StringSplitOptions.None);
+                    for (int i = 0; i < lines.Length; i++)
+                    {
+                        if (i > 0)
+                        {
+                            formatted.Spans.Add(new Span { Text = "\n" });
+                        }
+                        ParseDecoratedText(lines[i], formatted);
+                    }
+                    textLabel.FormattedText = formatted;
+                    _container.Children.Add(textLabel);
+                }
+            }
+            
+            // 何も追加されていない場合は空のラベルを追加
+            if (_container.Children.Count == 0)
+            {
+                _container.Children.Add(_label);
+            }
+        }
+
+        private List<object> ProcessImageTagsAndText(string text)
+        {
+            var result = new List<object>();
+            var imagePattern = @"<<img_\d{8}_\d{6}\.jpg>>";
+            var matches = Regex.Matches(text, imagePattern);
+            
+            if (matches.Count == 0)
+            {
+                // 画像タグがない場合はテキストのみ
+                result.Add(text);
+                return result;
+            }
+            
+            int lastIndex = 0;
+            foreach (Match match in matches)
+            {
+                // 画像タグ前のテキストを追加
+                if (match.Index > lastIndex)
+                {
+                    var textBefore = text.Substring(lastIndex, match.Index - lastIndex);
+                    if (!string.IsNullOrWhiteSpace(textBefore))
+                    {
+                        result.Add(textBefore);
+                    }
+                }
+                
+                // 画像を追加
+                var imageFileName = match.Value.Trim('<', '>');
+                var imagePath = System.IO.Path.Combine(ImageFolderPath, "img", imageFileName);
+                
+                // デバッグ情報を出力
+                System.Diagnostics.Debug.WriteLine($"=== 画像パス処理 ===");
+                System.Diagnostics.Debug.WriteLine($"ImageFolderPath: {ImageFolderPath}");
+                System.Diagnostics.Debug.WriteLine($"imageFileName: {imageFileName}");
+                System.Diagnostics.Debug.WriteLine($"構築されたimagePath: {imagePath}");
+                System.Diagnostics.Debug.WriteLine($"ファイル存在: {System.IO.File.Exists(imagePath)}");
+                
+                if (System.IO.File.Exists(imagePath))
+                {
+                    var image = new Image
+                    {
+                        Source = imagePath,
+                        Aspect = Aspect.AspectFit,
+                        HeightRequest = 200,
+                        HorizontalOptions = LayoutOptions.Center,
+                        Margin = new Thickness(0, 5, 0, 5)
+                    };
+                    
+                    // 画像にタップイベントを追加
+                    var tapGestureRecognizer = new TapGestureRecognizer();
+                    tapGestureRecognizer.Tapped += async (s, e) =>
+                    {
+                        try
+                        {
+                            var popupPage = new ImagePopupPage(imagePath, imageFileName);
+                            var navigationPage = new NavigationPage(popupPage);
+                            await Application.Current.MainPage.Navigation.PushModalAsync(navigationPage);
+                        }
+                        catch (Exception ex)
+                        {
+                            System.Diagnostics.Debug.WriteLine($"画像拡大表示エラー: {ex.Message}");
+                        }
+                    };
+                    image.GestureRecognizers.Add(tapGestureRecognizer);
+                    
+                    result.Add(image);
+                    System.Diagnostics.Debug.WriteLine($"画像を追加しました: {imagePath}");
+                }
+                else
+                {
+                    // 画像ファイルが存在しない場合はプレースホルダー
+                    result.Add($"[画像: {imageFileName}]");
+                    System.Diagnostics.Debug.WriteLine($"画像ファイルが見つかりません: {imagePath}");
+                }
+                
+                lastIndex = match.Index + match.Length;
+            }
+            
+            // 最後の画像タグ後のテキストを追加
+            if (lastIndex < text.Length)
+            {
+                var textAfter = text.Substring(lastIndex);
+                if (!string.IsNullOrWhiteSpace(textAfter))
+                {
+                    result.Add(textAfter);
+                }
+            }
+            
+            return result;
         }
 
         private void ParseDecoratedText(string text, FormattedString formatted)
@@ -203,21 +386,12 @@ namespace Flashnote
                         break;
                     case "color":
                         var colorText = minMatch.Groups[2].Value;
-                        // ネストした装飾があるかチェック
-                        if (HasNestedDecorations(colorText))
+                        formatted.Spans.Add(new Span
                         {
-                            // ネストした装飾を処理
-                            ProcessNestedDecorationsInSpan(colorText, $"color:{colorName}", formatted);
-                        }
-                        else
-                        {
-                            formatted.Spans.Add(new Span
-                            {
-                                Text = UnescapeText(colorText),
-                                FontSize = FontSize,
-                                TextColor = GetColorFromName(colorName)
-                            });
-                        }
+                            Text = UnescapeText(colorText),
+                            FontSize = FontSize,
+                            TextColor = GetColorFromName(colorName)
+                        });
                         break;
                     case "bold":
                         var boldText = minMatch.Groups[1].Value;
@@ -249,202 +423,6 @@ namespace Flashnote
             }
         }
 
-        /// <summary>
-        /// テキストにネストした装飾があるかチェック
-        /// </summary>
-        private bool HasNestedDecorations(string text)
-        {
-            return text.Contains("**") || text.Contains("^^") || text.Contains("~~") ||
-                   text.Contains("{{") || text.Contains("}}") || text.Contains("<<blank|");
-        }
-
-        /// <summary>
-        /// Span内でネストした装飾を処理
-        /// </summary>
-        private void ProcessNestedDecorationsInSpan(string text, string parentDecorationType, FormattedString formatted)
-        {
-            if (string.IsNullOrEmpty(text)) return;
-
-            // 親の色情報を取得
-            string parentColor = null;
-            if (parentDecorationType.StartsWith("color:"))
-            {
-                parentColor = parentDecorationType.Substring(6);
-            }
-
-            // パターンの優先順位: blank > color > bold > sup > sub
-            var patterns = new (string pattern, string type)[]
-            {
-                ("<<blank\\|(.*?)>>", "blank"),
-                ("\\{\\{(\\w+)\\|(.*?)\\}\\}", "color"),
-                ("\\*\\*([^*]+?)\\*\\*", "bold"),
-                ("\\^\\^(.*?)\\^\\^", "sup"),
-                ("~~(.*?)~~", "sub"),
-            };
-
-            int idx = 0;
-            while (idx < text.Length)
-            {
-                int minIndex = text.Length;
-                int patIdx = -1;
-                Match minMatch = null;
-                string colorName = null;
-
-                // 最も早くマッチするパターンを探す
-                for (int i = 0; i < patterns.Length; i++)
-                {
-                    var regex = new Regex(patterns[i].pattern);
-                    var match = regex.Match(text, idx);
-                    if (match.Success && match.Index < minIndex)
-                    {
-                        minIndex = match.Index;
-                        patIdx = i;
-                        minMatch = match;
-                        if (patterns[i].type == "color")
-                        {
-                            colorName = match.Groups[1].Value;
-                        }
-                    }
-                }
-
-                if (patIdx == -1)
-                {
-                    // 残りは通常テキスト（親の色を適用）
-                    var normal = text.Substring(idx);
-                    if (!string.IsNullOrEmpty(normal))
-                    {
-                        if (!string.IsNullOrEmpty(parentColor))
-                        {
-                            formatted.Spans.Add(new Span
-                            {
-                                Text = UnescapeText(normal),
-                                FontSize = FontSize,
-                                TextColor = GetColorFromName(parentColor)
-                            });
-                        }
-                        else
-                        {
-                            formatted.Spans.Add(new Span { Text = UnescapeText(normal) });
-                        }
-                    }
-                    break;
-                }
-
-                // 通常テキスト部分（親の色を適用）
-                if (minIndex > idx)
-                {
-                    var normal = text.Substring(idx, minIndex - idx);
-                    if (!string.IsNullOrEmpty(normal))
-                    {
-                        if (!string.IsNullOrEmpty(parentColor))
-                        {
-                            formatted.Spans.Add(new Span
-                            {
-                                Text = UnescapeText(normal),
-                                FontSize = FontSize,
-                                TextColor = GetColorFromName(parentColor)
-                            });
-                        }
-                        else
-                        {
-                            formatted.Spans.Add(new Span { Text = UnescapeText(normal) });
-                        }
-                    }
-                }
-
-                // 装飾部分
-                switch (patterns[patIdx].type)
-                {
-                    case "blank":
-                        var blankText = minMatch.Groups[1].Value;
-                        formatted.Spans.Add(new Span { Text = "(", FontSize = FontSize });
-                        formatted.Spans.Add(new Span
-                        {
-                            Text = ShowAnswer ? blankText : "_____",
-                            FontSize = FontSize,
-                            TextColor = ShowAnswer ? Colors.Red : Colors.Gray
-                        });
-                        formatted.Spans.Add(new Span { Text = ")", FontSize = FontSize });
-                        break;
-                    case "color":
-                        var colorText = minMatch.Groups[2].Value;
-                        formatted.Spans.Add(new Span
-                        {
-                            Text = UnescapeText(colorText),
-                            FontSize = FontSize,
-                            TextColor = GetColorFromName(colorName)
-                        });
-                        break;
-                    case "bold":
-                        var boldText = minMatch.Groups[1].Value;
-                        if (!string.IsNullOrEmpty(parentColor))
-                        {
-                            // 親の色を適用した太字
-                            formatted.Spans.Add(new Span
-                            {
-                                Text = UnescapeText(boldText),
-                                FontSize = FontSize,
-                                FontAttributes = FontAttributes.Bold,
-                                TextColor = GetColorFromName(parentColor)
-                            });
-                        }
-                        else
-                        {
-                            formatted.Spans.Add(new Span
-                            {
-                                Text = UnescapeText(boldText),
-                                FontSize = FontSize,
-                                FontAttributes = FontAttributes.Bold
-                            });
-                        }
-                        break;
-                    case "sup":
-                        var supText = minMatch.Groups[1].Value;
-                        if (!string.IsNullOrEmpty(parentColor))
-                        {
-                            // 親の色を適用した上付き文字
-                            formatted.Spans.Add(new Span
-                            {
-                                Text = UnescapeText(supText),
-                                FontSize = FontSize * 0.7,
-                                TextColor = GetColorFromName(parentColor)
-                            });
-                        }
-                        else
-                        {
-                            formatted.Spans.Add(new Span
-                            {
-                                Text = UnescapeText(supText),
-                                FontSize = FontSize * 0.7
-                            });
-                        }
-                        break;
-                    case "sub":
-                        var subText = minMatch.Groups[1].Value;
-                        if (!string.IsNullOrEmpty(parentColor))
-                        {
-                            // 親の色を適用した下付き文字
-                            formatted.Spans.Add(new Span
-                            {
-                                Text = UnescapeText(subText),
-                                FontSize = FontSize * 0.7,
-                                TextColor = GetColorFromName(parentColor)
-                            });
-                        }
-                        else
-                        {
-                            formatted.Spans.Add(new Span
-                            {
-                                Text = UnescapeText(subText),
-                                FontSize = FontSize * 0.7
-                            });
-                        }
-                        break;
-                }
-                idx = minMatch.Index + minMatch.Length;
-            }
-        }
-
         private Color GetColorFromName(string colorName)
         {
             return colorName.ToLower() switch
@@ -462,18 +440,6 @@ namespace Flashnote
                 "white" => Colors.White,
                 _ => Colors.Black
             };
-        }
-
-        private string ProcessImageTags(string text)
-        {
-            // 画像タグを処理（例: <img>filename.png</img>）
-            var imagePattern = @"<img>(.*?)</img>";
-            return Regex.Replace(text, imagePattern, match =>
-            {
-                var imagePath = match.Groups[1].Value;
-                // 画像の表示処理をここに追加
-                return $"[画像: {imagePath}]";
-            });
         }
 
         private string UnescapeText(string text)

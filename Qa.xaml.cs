@@ -436,21 +436,29 @@ namespace Flashnote
         private void DisplayBasicCard(CardData card)
         {
             BasicCardLayout.IsVisible = true;
-            this.frontText = card.front ?? "";
+
             string frontText = card.front ?? "";
             string backText = card.back ?? "";
 
+            // デバッグ情報を出力
+            Debug.WriteLine($"=== Qa.xaml.cs DisplayBasicCard ===");
+            Debug.WriteLine($"tempExtractPath: {tempExtractPath}");
+            Debug.WriteLine($"FrontPreviewLabel.ImageFolderPath (設定前): {FrontPreviewLabel.ImageFolderPath}");
+            Debug.WriteLine($"frontText: {frontText}");
+
             // RichTextLabelにテキストを設定
+            FrontPreviewLabel.ImageFolderPath = tempExtractPath;
             FrontPreviewLabel.RichText = frontText;
             FrontPreviewLabel.ShowAnswer = false;
-            FrontPreviewLabel.ImageFolderPath = tempExtractPath;
+
+            Debug.WriteLine($"FrontPreviewLabel.ImageFolderPath (設定後): {FrontPreviewLabel.ImageFolderPath}");
 
             // 裏面が空でない場合のみ設定
             if (!string.IsNullOrWhiteSpace(backText))
             {
+                BackPreviewLabel.ImageFolderPath = tempExtractPath;
                 BackPreviewLabel.RichText = backText;
                 BackPreviewLabel.ShowAnswer = false;
-                BackPreviewLabel.ImageFolderPath = tempExtractPath;
             }
 
             BackPreviewFrame.IsVisible = false;
@@ -465,10 +473,18 @@ namespace Flashnote
 
             var (question, explanation, choices, isCorrectFlags) = ParseChoiceCard(card);
 
+            // デバッグ情報を出力
+            Debug.WriteLine($"=== Qa.xaml.cs DisplayChoiceCard ===");
+            Debug.WriteLine($"tempExtractPath: {tempExtractPath}");
+            Debug.WriteLine($"ChoiceQuestionLabel.ImageFolderPath (設定前): {ChoiceQuestionLabel.ImageFolderPath}");
+            Debug.WriteLine($"question: {question}");
+
             // 選択肢カードの問題Label設定
+            ChoiceQuestionLabel.ImageFolderPath = tempExtractPath;
             ChoiceQuestionLabel.RichText = question;
             ChoiceQuestionLabel.ShowAnswer = false;
-            ChoiceQuestionLabel.ImageFolderPath = tempExtractPath;
+
+            Debug.WriteLine($"ChoiceQuestionLabel.ImageFolderPath (設定後): {ChoiceQuestionLabel.ImageFolderPath}");
 
             ChoiceContainer.Children.Clear();
             checkBoxes.Clear();
@@ -1404,6 +1420,22 @@ namespace Flashnote
             record.NextReviewDate = nextReviewDate;
             
             Debug.WriteLine($"学習記録を更新: カード{card.id} - {(isCorrect ? "正解" : "不正解")} - 次回: {nextReviewDate}");
+        }
+
+        // 画像拡大表示メソッド（必要に応じて使用）
+        private async void ShowImagePopup(string imagePath, string imageFileName = null)
+        {
+            try
+            {
+                var popupPage = new ImagePopupPage(imagePath, imageFileName);
+                var navigationPage = new NavigationPage(popupPage);
+                await Navigation.PushModalAsync(navigationPage);
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"画像拡大表示エラー: {ex.Message}");
+                await DisplayAlert("エラー", "画像の拡大表示に失敗しました。", "OK");
+            }
         }
 
         // Labelを使用した装飾文字表示の実装例

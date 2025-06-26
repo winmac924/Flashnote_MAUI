@@ -1,0 +1,49 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<ContentPage xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+             x:Class="Flashnote.ImagePopupPage"
+             BackgroundColor="Black"
+             NavigationPage.HasNavigationBar="False">
+
+    <Grid>
+        <!-- 背景の半透明オーバーレイ -->
+        <BoxView BackgroundColor="Black" Opacity="0.8"/>
+        
+        <!-- 画像表示エリア -->
+        <Grid Margin="20">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="*"/>
+                <RowDefinition Height="Auto"/>
+            </Grid.RowDefinitions>
+            
+            <!-- 閉じるボタン -->
+            <Button Grid.Row="0" 
+                    Text="✕" 
+                    FontSize="24"
+                    BackgroundColor="Transparent"
+                    TextColor="White"
+                    HorizontalOptions="End"
+                    Margin="0,0,0,10"
+                    Clicked="OnCloseClicked"/>
+            
+            <!-- 画像表示 -->
+            <ScrollView Grid.Row="1" 
+                       HorizontalScrollBarVisibility="Default"
+                       VerticalScrollBarVisibility="Default">
+                <Image x:Name="PopupImage"
+                       Aspect="AspectFit"
+                       HorizontalOptions="Center"
+                       VerticalOptions="Center"/>
+            </ScrollView>
+            
+            <!-- 画像情報 -->
+            <Label Grid.Row="2" 
+                   x:Name="ImageInfoLabel"
+                   TextColor="White"
+                   HorizontalOptions="Center"
+                   Margin="0,10,0,0"
+                   IsVisible="False"/>
+        </Grid>
+    </Grid>
+</ContentPage> 

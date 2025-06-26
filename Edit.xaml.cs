@@ -64,6 +64,8 @@ namespace Flashnote
 
                 // カードタイプの初期設定
                 CardTypePicker.SelectedIndex = 0;
+
+                Debug.WriteLine(tempExtractPath);
             }
             catch (Exception ex)
             {
@@ -185,9 +187,17 @@ namespace Flashnote
                 {
                     try
                     {
+                        // デバッグ情報を出力
+                        Debug.WriteLine($"=== Edit.xaml.cs UpdateFrontPreviewWithDebounce ===");
+                        Debug.WriteLine($"tempExtractPath: {tempExtractPath}");
+                        Debug.WriteLine($"FrontPreviewLabel.ImageFolderPath (設定前): {FrontPreviewLabel.ImageFolderPath}");
+                        
+                        FrontPreviewLabel.ImageFolderPath = tempExtractPath;
                         FrontPreviewLabel.RichText = text;
                         FrontPreviewLabel.ShowAnswer = false;
-                        FrontPreviewLabel.ImageFolderPath = tempExtractPath;
+                        
+                        Debug.WriteLine($"FrontPreviewLabel.ImageFolderPath (設定後): {FrontPreviewLabel.ImageFolderPath}");
+                        Debug.WriteLine($"FrontPreviewLabel.RichText: {FrontPreviewLabel.RichText}");
                     }
                     catch (Exception ex)
                     {
@@ -220,9 +230,17 @@ namespace Flashnote
                 {
                     try
                     {
+                        // デバッグ情報を出力
+                        Debug.WriteLine($"=== Edit.xaml.cs UpdateBackPreviewWithDebounce ===");
+                        Debug.WriteLine($"tempExtractPath: {tempExtractPath}");
+                        Debug.WriteLine($"BackPreviewLabel.ImageFolderPath (設定前): {BackPreviewLabel.ImageFolderPath}");
+                        
+                        BackPreviewLabel.ImageFolderPath = tempExtractPath;
                         BackPreviewLabel.RichText = text;
                         BackPreviewLabel.ShowAnswer = false;
-                        BackPreviewLabel.ImageFolderPath = tempExtractPath;
+                        
+                        Debug.WriteLine($"BackPreviewLabel.ImageFolderPath (設定後): {BackPreviewLabel.ImageFolderPath}");
+                        Debug.WriteLine($"BackPreviewLabel.RichText: {BackPreviewLabel.RichText}");
                     }
                     catch (Exception ex)
                     {
@@ -235,681 +253,6 @@ namespace Flashnote
             };
             _backPreviewTimer.AutoReset = false;
             _backPreviewTimer.Start();
-        }
-
-
-
-        private string ConvertMarkdownToHtml(string text)
-        {
-            if (string.IsNullOrWhiteSpace(text)) return "";
-
-            // ダークモード対応
-            var isDarkMode = Application.Current?.RequestedTheme == AppTheme.Dark;
-            var backgroundColor = isDarkMode ? "#1E1E1E" : "#FFFFFF";
-            var textColor = isDarkMode ? "#FFFFFF" : "#000000";
-            var codeBackground = isDarkMode ? "#2D2D30" : "#F5F5F5";
-
-            // 画像タグを最初に処理 - iOS版の形式に対応
-            var matches = Regex.Matches(text, @"<<img_\d{8}_\d{6}\.jpg>>");
-            Debug.WriteLine($"画像タグ数: {matches.Count}");
-            foreach (Match match in matches)
-            {
-                string imgFileName = match.Value.Trim('<', '>');
-                string imgPath = Path.Combine(tempExtractPath, "img", imgFileName);
-
-                if (File.Exists(imgPath))
-                {
-                    string base64Image = ConvertImageToBase64(imgPath);
-                    if (base64Image != null)
-                    {
-                        text = text.Replace(match.Value, $"<img src={base64Image} style='max-height:150px; border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.2);' />");
-                    }
-                    else
-                    {
-                        text = text.Replace(match.Value, $"[画像が見つかりません: {imgFileName}]");
-                    }
-                }
-                else
-                {
-                    text = text.Replace(match.Value, $"[画像が見つかりません: {imgFileName}]");
-                }
-            }
-
-            // 穴埋め変換 `<<blank|文字>>` → `( )`
-            var redColor = isDarkMode ? "#FF6B6B" : "red";
-            text = Regex.Replace(text, @"<<blank\|(.*?)>>", "( )");
-
-            // 改行の正規化と段落処理
-            text = text.Replace("\r\n", "\n").Replace("\r", "\n");
-            
-            // imgタグを一時的に保護
-            var protectedElements = new List<string>();
-            int elementIndex = 0;
-            
-            text = Regex.Replace(text, @"<img[^>]*>", match =>
-            {
-                var placeholder = $"__ELEMENT_PLACEHOLDER_{elementIndex}__";
-                protectedElements.Add(match.Value);
-                elementIndex++;
-                return placeholder;
-            });
-
-            // HTML エスケープ
-            text = HttpUtility.HtmlEncode(text);
-
-            // 保護された要素を復元
-            for (int i = 0; i < protectedElements.Count; i++)
-            {
-                text = text.Replace($"__ELEMENT_PLACEHOLDER_{i}__", protectedElements[i]);
-            }
-
-            // 太字変換
-            text = Regex.Replace(text, @"\*\*(.*?)\*\*", "<b>$1</b>");
-
-            // ダークモード対応の色変換
-            var blueColor = isDarkMode ? "#6BB6FF" : "blue";
-            var greenColor = isDarkMode ? "#90EE90" : "green";
-            var yellowColor = isDarkMode ? "#FFD700" : "yellow";
-            var purpleColor = isDarkMode ? "#DA70D6" : "purple";
-            var orangeColor = isDarkMode ? "#FFA500" : "orange";
-            
-            text = Regex.Replace(text, @"\{\{red\|(.*?)\}\}", $"<span style='color:{redColor};'>$1</span>");
-            text = Regex.Replace(text, @"\{\{blue\|(.*?)\}\}", $"<span style='color:{blueColor};'>$1</span>");
-            text = Regex.Replace(text, @"\{\{green\|(.*?)\}\}", $"<span style='color:{greenColor};'>$1</span>");
-            text = Regex.Replace(text, @"\{\{yellow\|(.*?)\}\}", $"<span style='color:{yellowColor};'>$1</span>");
-            text = Regex.Replace(text, @"\{\{purple\|(.*?)\}\}", $"<span style='color:{purpleColor};'>$1</span>");
-            text = Regex.Replace(text, @"\{\{orange\|(.*?)\}\}", $"<span style='color:{orangeColor};'>$1</span>");
-
-            // 上付き・下付き変換
-            text = Regex.Replace(text, @"\^\^(.*?)\^\^", "<sup>$1</sup>");
-            text = Regex.Replace(text, @"~~(.*?)~~", "<sub>$1</sub>");
-
-            // 段落処理
-            var lines = text.Split('\n');
-            var processedLines = new List<string>();
-            
-            for (int i = 0; i < lines.Length; i++)
-            {
-                var line = lines[i];
-                
-                if (string.IsNullOrWhiteSpace(line))
-                {
-                    // 空行の場合
-                    if (processedLines.Count > 0 && !processedLines.Last().EndsWith("</p>"))
-                    {
-                        processedLines.Add("</p>");
-                    }
-                    if (i < lines.Length - 1 && !string.IsNullOrWhiteSpace(lines[i + 1]))
-                    {
-                        processedLines.Add("<p>");
-                    }
-                }
-                else
-                {
-                    // 最初の行または前の行が空行の場合、段落開始
-                    if (processedLines.Count == 0 || processedLines.Last().EndsWith("</p>") || processedLines.Last() == "<p>")
-                    {
-                        if (processedLines.Count == 0 || processedLines.Last() != "<p>")
-                        {
-                            processedLines.Add("<p>");
-                        }
-                        processedLines.Add(line);
-                    }
-                    else
-                    {
-                        // 同じ段落内の改行
-                        processedLines.Add("<br>" + line);
-                    }
-                }
-            }
-            
-            // 最後の段落を閉じる
-            if (processedLines.Count > 0 && !processedLines.Last().EndsWith("</p>"))
-            {
-                processedLines.Add("</p>");
-            }
-            
-            text = string.Join("", processedLines);
-
-            // HTML テンプレート
-            string htmlTemplate = $@"
-            <html>
-            <head>
-                <meta name='viewport' content='width=device-width, initial-scale=1.0'>
-                <style>
-                    body {{ 
-                        font-size: 18px; 
-                        font-family: Arial, sans-serif; 
-                        line-height: 1.5; 
-                        background-color: {backgroundColor};
-                        color: {textColor};
-                        margin: 10px;
-                        padding: 10px;
-                        min-height: 100vh;
-                    }}
-                    sup {{ vertical-align: super; font-size: smaller; }}
-                    sub {{ vertical-align: sub; font-size: smaller; }}
-                    img {{ 
-                        display: block; 
-                        margin: 10px 0; 
-                        border-radius: 8px;
-                        box-shadow: 0 2px 8px rgba(0,0,0,0.2);
-                        max-height: 150px;
-                    }}
-                    code {{
-                        background-color: {codeBackground};
-                        padding: 2px 4px;
-                        border-radius: 4px;
-                        font-family: 'Courier New', monospace;
-                    }}
-                    pre {{
-                        background-color: {codeBackground};
-                        padding: 10px;
-                        border-radius: 8px;
-                        overflow-x: auto;
-                    }}
-                    p {{
-                        margin: 0 0 10px 0;
-                        padding: 0;
-                    }}
-                    p:last-child {{
-                        margin-bottom: 0;
-                    }}
-                </style>
-            </head>
-            <body>{text}</body>
-            </html>";
-
-            return htmlTemplate;
-        }
-
-        private string ConvertImageToBase64(string imagePath)
-        {
-            if (!File.Exists(imagePath))
-            {
-                return null;
-            }
-
-            byte[] imageBytes = File.ReadAllBytes(imagePath);
-            string base64String = Convert.ToBase64String(imageBytes);
-            string mimeType = Path.GetExtension(imagePath).ToLower() switch
-            {
-                ".png" => "image/png",
-                ".jpg" => "image/jpeg",
-                ".jpeg" => "image/jpeg",
-                ".gif" => "image/gif",
-                _ => "application/octet-stream"
-            };
-
-            return $"data:{mimeType};base64,{base64String}";
-        }
-
-        /// <summary>
-        /// ベースHTMLテンプレートを作成（JavaScript機能付き）
-        /// </summary>
-        private string CreateBaseHtmlTemplate()
-        {
-            var isDarkMode = Application.Current?.RequestedTheme == AppTheme.Dark;
-            var backgroundColor = isDarkMode ? "#1E1E1E" : "#FFFFFF";
-            var textColor = isDarkMode ? "#FFFFFF" : "#000000";
-            var codeBackground = isDarkMode ? "#2D2D30" : "#F5F5F5";
-            var redColor = isDarkMode ? "#FF6B6B" : "red";
-            
-            return $@"
-            <html>
-            <head>
-                <meta name='viewport' content='width=device-width, initial-scale=1.0'>
-                <style>
-                    body {{ 
-                        font-size: 18px; 
-                        font-family: Arial, sans-serif; 
-                        line-height: 1.5; 
-                        background-color: {backgroundColor};
-                        color: {textColor};
-                        margin: 10px;
-                        padding: 10px;
-                        min-height: 100vh;
-                    }}
-                    sup {{ vertical-align: super; font-size: smaller; }}
-                    sub {{ vertical-align: sub; font-size: smaller; }}
-                    img {{ 
-                        display: block; 
-                        margin: 10px 0; 
-                        border-radius: 8px;
-                        box-shadow: 0 2px 8px rgba(0,0,0,0.2);
-                        max-height: 150px;
-                    }}
-                    code {{
-                        background-color: {codeBackground};
-                        padding: 2px 4px;
-                        border-radius: 4px;
-                        font-family: 'Courier New', monospace;
-                    }}
-                    pre {{
-                        background-color: {codeBackground};
-                        padding: 10px;
-                        border-radius: 8px;
-                        overflow-x: auto;
-                    }}
-                    .blank-placeholder {{
-                        min-width: 20px;
-                        display: inline-block;
-                    }}
-                    #main-content {{
-                        opacity: 1;
-                        transition: opacity 0.3s ease;
-                    }}
-                    .loading {{
-                        opacity: 0.5;
-                    }}
-                    p {{
-                        margin: 0 0 10px 0;
-                        padding: 0;
-                    }}
-                    p:last-child {{
-                        margin-bottom: 0;
-                    }}
-                </style>
-                <script>
-                    console.log('JavaScript loaded');
-                    
-                    function updateContent(content) {{
-                        console.log('updateContent called with:', content);
-                        var mainContent = document.getElementById('main-content');
-                        if (mainContent) {{
-                            console.log('Updating main-content');
-                            mainContent.innerHTML = content;
-                            console.log('Content updated successfully');
-                            console.log('New innerHTML:', mainContent.innerHTML);
-                        }} else {{
-                            console.error('main-content element not found');
-                        }}
-                    }}
-                    
-                    function updateContentBase64(base64Content) {{
-                        console.log('updateContentBase64 called');
-                        try {{
-                            // 方法1: TextDecoderを使用（最も確実）
-                            if (typeof TextDecoder !== 'undefined') {{
-                                var binaryString = atob(base64Content);
-                                var bytes = new Uint8Array(binaryString.length);
-                                for (var i = 0; i < binaryString.length; i++) {{
-                                    bytes[i] = binaryString.charCodeAt(i);
-                                }}
-                                var decoder = new TextDecoder('utf-8');
-                                var decodedContent = decoder.decode(bytes);
-                                console.log('TextDecoder decoded content:', decodedContent);
-                            }} else {{
-                                // 方法2: decodeURIComponent + escapeを使用
-                                var decodedContent = decodeURIComponent(escape(atob(base64Content)));
-                                console.log('decodeURIComponent decoded content:', decodedContent);
-                            }}
-                            
-                            var mainContent = document.getElementById('main-content');
-                            if (mainContent) {{
-                                console.log('Updating main-content with base64 content');
-                                mainContent.innerHTML = decodedContent;
-                                console.log('Content updated successfully');
-                            }} else {{
-                                console.error('main-content element not found');
-                            }}
-                        }} catch (e) {{
-                            console.error('Base64 decode error:', e);
-                            // フォールバック: 標準のatobを試行
-                            try {{
-                                var fallbackContent = atob(base64Content);
-                                var mainContent = document.getElementById('main-content');
-                                if (mainContent) {{
-                                    mainContent.innerHTML = fallbackContent;
-                                    console.log('Fallback decode successful');
-                                }}
-                            }} catch (fallbackError) {{
-                                console.error('Fallback decode also failed:', fallbackError);
-                            }}
-                        }}
-                    }}
-                    
-                    function showAllAnswers() {{
-                        var blanks = document.querySelectorAll('.blank-placeholder');
-                        blanks.forEach(function(blank) {{
-                            var answer = blank.getAttribute('data-answer');
-                            if (answer) {{
-                                blank.textContent = answer;
-                                blank.style.color = '{redColor}';
-                            }}
-                        }});
-                    }}
-                    
-                    function insertText(elementId, text) {{
-                        var element = document.getElementById(elementId);
-                        if (element) {{
-                            element.innerHTML = text;
-                        }}
-                    }}
-                    
-                    // DOM読み込み完了後の確認
-                    document.addEventListener('DOMContentLoaded', function() {{
-                        console.log('DOM loaded, main-content exists:', !!document.getElementById('main-content'));
-                    }});
-                </script>
-            </head>
-            <body>
-                <div id='main-content'>読み込み中...</div>
-            </body>
-            </html>";
-        }
-
-        /// <summary>
-        /// コンテンツ部分のみのHTMLを生成
-        /// </summary>
-        private string ConvertToContentHtml(string text, bool showAnswer = false)
-        {
-            if (string.IsNullOrWhiteSpace(text)) return "";
-
-            // 画像タグを最初に処理
-            var matches = Regex.Matches(text, @"<<img_.*?\.jpg>>");
-            Debug.WriteLine($"画像タグ数: {matches.Count}");
-            foreach (Match match in matches)
-            {
-                string imgFileName = match.Value.Trim('<', '>');
-                string imgPath = Path.Combine(tempExtractPath, "img", imgFileName);
-
-                if (File.Exists(imgPath))
-                {
-                    string base64Image = ConvertImageToBase64(imgPath);
-                    if (base64Image != null)
-                    {
-                        text = text.Replace(match.Value, $"<img src={base64Image} style=max-height:150px; />");
-                    }
-                    else
-                    {
-                        text = text.Replace(match.Value, $"[画像が見つかりません: {imgFileName}]");
-                    }
-                }
-                else
-                {
-                    text = text.Replace(match.Value, $"[画像が見つかりません: {imgFileName}]");
-                }
-            }
-
-            // 穴埋め表示処理（JavaScript操作用のIDを付与）
-            var isDarkMode = Application.Current?.RequestedTheme == AppTheme.Dark;
-            var redColor = isDarkMode ? "#FF6B6B" : "red";
-            
-            int blankCounter = 0;
-            if (showAnswer)
-            {
-                // 解答表示時は `<<blank|文字>>` → `(文字)`
-                text = Regex.Replace(text, @"<<blank\|(.*?)>>", match =>
-                {
-                    blankCounter++;
-                    var answer = match.Groups[1].Value;
-                    return $"(<span id='blank_{blankCounter}' style='color:{redColor};'>{answer}</span>)";
-                });
-            }
-            else
-            {
-                // 問題表示時は `<<blank|文字>>` → `( )` （後でJavaScriptで操作可能）
-                text = Regex.Replace(text, @"<<blank\|(.*?)>>", match =>
-                {
-                    blankCounter++;
-                    var answer = match.Groups[1].Value;
-                    return $"(<span id='blank_{blankCounter}' data-answer='{HttpUtility.HtmlEncode(answer)}' class='blank-placeholder'> </span>)";
-                });
-            }
-
-            // 改行の正規化と段落処理
-            text = text.Replace("\r\n", "\n").Replace("\r", "\n");
-            
-            // 穴埋めのspanタグとimgタグを一時的に保護
-            var protectedElements = new List<string>();
-            int elementIndex = 0;
-            
-            // spanタグを保護
-            text = Regex.Replace(text, @"<span[^>]*>.*?</span>", match =>
-            {
-                var placeholder = $"__ELEMENT_PLACEHOLDER_{elementIndex}__";
-                protectedElements.Add(match.Value);
-                elementIndex++;
-                return placeholder;
-            });
-            
-            // imgタグを保護
-            text = Regex.Replace(text, @"<img[^>]*>", match =>
-            {
-                var placeholder = $"__ELEMENT_PLACEHOLDER_{elementIndex}__";
-                protectedElements.Add(match.Value);
-                elementIndex++;
-                return placeholder;
-            });
-
-            // HTML エスケープ
-            text = HttpUtility.HtmlEncode(text);
-
-            // 保護された要素を復元
-            for (int i = 0; i < protectedElements.Count; i++)
-            {
-                text = text.Replace($"__ELEMENT_PLACEHOLDER_{i}__", protectedElements[i]);
-            }
-
-            // 太字変換
-            text = Regex.Replace(text, @"\*\*(.*?)\*\*", "<b>$1</b>");
-
-            // ダークモード対応の色変換
-            var blueColor = isDarkMode ? "#6BB6FF" : "blue";
-            var greenColor = isDarkMode ? "#90EE90" : "green";
-            var yellowColor = isDarkMode ? "#FFD700" : "yellow";
-            var purpleColor = isDarkMode ? "#DA70D6" : "purple";
-            var orangeColor = isDarkMode ? "#FFA500" : "orange";
-            
-            text = Regex.Replace(text, @"\{\{red\|(.*?)\}\}", $"<span style='color:{redColor};'>$1</span>");
-            text = Regex.Replace(text, @"\{\{blue\|(.*?)\}\}", $"<span style='color:{blueColor};'>$1</span>");
-            text = Regex.Replace(text, @"\{\{green\|(.*?)\}\}", $"<span style='color:{greenColor};'>$1</span>");
-            text = Regex.Replace(text, @"\{\{yellow\|(.*?)\}\}", $"<span style='color:{yellowColor};'>$1</span>");
-            text = Regex.Replace(text, @"\{\{purple\|(.*?)\}\}", $"<span style='color:{purpleColor};'>$1</span>");
-            text = Regex.Replace(text, @"\{\{orange\|(.*?)\}\}", $"<span style='color:{orangeColor};'>$1</span>");
-
-            // 上付き・下付き変換
-            text = Regex.Replace(text, @"\^\^(.*?)\^\^", "<sup>$1</sup>");
-            text = Regex.Replace(text, @"~~(.*?)~~", "<sub>$1</sub>");
-
-            // 必要な部分だけデコード処理
-            text = Regex.Replace(text, @"&lt;img(.*?)&gt;", "<img$1>");
-            text = Regex.Replace(text, @"&lt;span(.*?)&gt;", "<span$1>");
-            text = Regex.Replace(text, @"&lt;/span&gt;", "</span>");
-
-            // 改行処理：連続する空行を段落として処理
-            var lines = text.Split('\n');
-            var processedLines = new List<string>();
-            
-            for (int i = 0; i < lines.Length; i++)
-            {
-                var line = lines[i].Trim();
-                
-                if (string.IsNullOrEmpty(line))
-                {
-                    // 空行の場合、段落区切りとして処理
-                    if (processedLines.Count > 0 && !processedLines.Last().EndsWith("</p>"))
-                    {
-                        processedLines.Add("</p><p>");
-                    }
-                }
-                else
-                {
-                    // 最初の行の場合はpタグで開始
-                    if (processedLines.Count == 0)
-                    {
-                        processedLines.Add("<p>" + line);
-                    }
-                    else if (processedLines.Last().EndsWith("</p><p>"))
-                    {
-                        // 新しい段落の最初の行
-                        processedLines[processedLines.Count - 1] = processedLines.Last() + line;
-                    }
-                    else
-                    {
-                        // 同じ段落内での改行
-                        processedLines.Add("<br>" + line);
-                    }
-                }
-            }
-            
-            // 最後にpタグを閉じる
-            if (processedLines.Count > 0 && !processedLines.Last().EndsWith("</p>"))
-            {
-                processedLines.Add("</p>");
-            }
-            
-            text = string.Join("", processedLines);
-
-            return text;
-        }
-
-        /// <summary>
-        /// WebView初期化を確実に行う
-        /// </summary>
-        private async Task EnsureWebViewInitialized(WebView webView)
-        {
-            try
-            {
-                // WebViewハンドラーの初期化確認
-                if (webView?.Handler == null)
-                {
-                    Debug.WriteLine("WebViewハンドラーが未初期化");
-                    return;
-                }
-
-                // プラットフォーム固有の初期化
-#if WINDOWS
-                var platformView = webView.Handler.PlatformView;
-                if (platformView != null)
-                {
-                    // リフレクションを使用してWebView2の初期化を確認
-                    try
-                    {
-                        var coreWebView2Property = platformView.GetType().GetProperty("CoreWebView2");
-                        if (coreWebView2Property != null)
-                        {
-                            var coreWebView2 = coreWebView2Property.GetValue(platformView);
-                            if (coreWebView2 == null)
-                            {
-                                Debug.WriteLine("CoreWebView2を初期化中...");
-                                var ensureMethod = platformView.GetType().GetMethod("EnsureCoreWebView2Async");
-                                if (ensureMethod != null)
-                                {
-                                    var task = ensureMethod.Invoke(platformView, null) as Task;
-                                    if (task != null)
-                                    {
-                                        await task;
-                                        Debug.WriteLine("CoreWebView2初期化完了");
-                                        // 初期化後に少し待機
-                                        await Task.Delay(100);
-                                    }
-                                }
-                            }
-                        }
-                    }
-                    catch (Exception reflectionEx)
-                    {
-                        Debug.WriteLine($"リフレクション処理エラー: {reflectionEx.Message}");
-                    }
-                }
-#endif
-            }
-            catch (Exception ex)
-            {
-                Debug.WriteLine($"WebView初期化エラー: {ex.Message}");
-                // 初期化エラーは致命的ではないため、続行
-            }
-        }
-
-        /// <summary>
-        /// WebViewのコンテンツ部分のみを更新
-        /// </summary>
-        private async Task UpdateWebViewContent(WebView webView, string text, bool showAnswer = false)
-        {
-            try
-            {
-                // WebViewが初期化されているかチェック
-                if (webView?.Handler == null)
-                {
-                    Debug.WriteLine("WebView未初期化のため、フォールバックを使用");
-                    throw new InvalidOperationException("WebView not initialized");
-                }
-
-                // WebView2の初期化を確実に行う
-                await EnsureWebViewInitialized(webView);
-
-                var contentHtml = ConvertToContentHtml(text, showAnswer);
-                
-                // JavaScript実行前に少し待機
-                await Task.Delay(50);
-                
-                Debug.WriteLine($"元のコンテンツ: {contentHtml}");
-                
-                // 方法1: Base64エンコードを使用（より安全）
-                try
-                {
-                    var contentBytes = System.Text.Encoding.UTF8.GetBytes(contentHtml);
-                    var base64Content = Convert.ToBase64String(contentBytes);
-                    
-                    Debug.WriteLine($"Base64エンコード実行: updateContentBase64('{base64Content.Substring(0, Math.Min(base64Content.Length, 50))}...');");
-                    await webView.EvaluateJavaScriptAsync($"updateContentBase64('{base64Content}');");
-                    
-                    // JavaScript実行後に確認
-                    await Task.Delay(100);
-                    var consoleCheck = await webView.EvaluateJavaScriptAsync("document.getElementById('main-content').innerHTML;");
-                    Debug.WriteLine($"Base64更新後のコンテンツ確認: {consoleCheck}");
-                }
-                catch (Exception base64Ex)
-                {
-                    Debug.WriteLine($"Base64方式エラー: {base64Ex.Message}");
-                    
-                    // 方法2: 従来のエスケープ処理（フォールバック）
-                    try
-                    {
-                        var escapedContent = contentHtml
-                            .Replace("\\", "\\\\")    // バックスラッシュを最初に処理
-                            .Replace("'", "\\'")      // シングルクォート
-                            .Replace("\"", "\\\"")    // ダブルクォート
-                            .Replace("\r\n", "\\n")   // 改行（CRLF）
-                            .Replace("\n", "\\n")     // 改行（LF）
-                            .Replace("\r", "\\n")     // 改行（CR）
-                            .Replace("\t", "\\t");    // タブ
-                        
-                        Debug.WriteLine($"エスケープ方式実行: updateContent('{escapedContent.Substring(0, Math.Min(escapedContent.Length, 50))}...');");
-                        await webView.EvaluateJavaScriptAsync($"updateContent('{escapedContent}');");
-                        
-                        await Task.Delay(100);
-                        var consoleCheck2 = await webView.EvaluateJavaScriptAsync("document.getElementById('main-content').innerHTML;");
-                        Debug.WriteLine($"エスケープ更新後のコンテンツ確認: {consoleCheck2}");
-                    }
-                    catch (Exception escapeEx)
-                    {
-                        Debug.WriteLine($"エスケープ方式エラー: {escapeEx.Message}");
-                        throw;
-                    }
-                }
-                Debug.WriteLine("WebViewコンテンツ更新完了");
-            }
-            catch (Exception ex)
-            {
-                Debug.WriteLine($"WebViewコンテンツ更新エラー: {ex.Message}");
-                Debug.WriteLine($"エラー詳細: {ex}");
-                
-                // フォールバック：HTML全体を再読み込み
-                try
-                {
-                    Debug.WriteLine("フォールバック実行中...");
-                    var fullHtml = ConvertMarkdownToHtml(text ?? "");
-                    webView.Source = new HtmlWebViewSource { Html = fullHtml };
-                    Debug.WriteLine("フォールバック完了");
-                }
-                catch (Exception fallbackEx)
-                {
-                    Debug.WriteLine($"フォールバックエラー: {fallbackEx.Message}");
-                }
-            }
         }
 
         private async void AutoSaveTimer_Elapsed(object sender, System.Timers.ElapsedEventArgs e)
@@ -1600,9 +943,17 @@ namespace Flashnote
                 {
                     try
                     {
+                        // デバッグ情報を出力
+                        Debug.WriteLine($"=== Edit.xaml.cs UpdateChoiceQuestionPreviewWithDebounce ===");
+                        Debug.WriteLine($"tempExtractPath: {tempExtractPath}");
+                        Debug.WriteLine($"ChoicePreviewLabel.ImageFolderPath (設定前): {ChoicePreviewLabel.ImageFolderPath}");
+                        
+                        ChoicePreviewLabel.ImageFolderPath = tempExtractPath;
                         ChoicePreviewLabel.RichText = text;
                         ChoicePreviewLabel.ShowAnswer = false;
-                        ChoicePreviewLabel.ImageFolderPath = tempExtractPath;
+                        
+                        Debug.WriteLine($"ChoicePreviewLabel.ImageFolderPath (設定後): {ChoicePreviewLabel.ImageFolderPath}");
+                        Debug.WriteLine($"ChoicePreviewLabel.RichText: {ChoicePreviewLabel.RichText}");
                     }
                     catch (Exception ex)
                     {
@@ -1635,9 +986,17 @@ namespace Flashnote
                 {
                     try
                     {
+                        // デバッグ情報を出力
+                        Debug.WriteLine($"=== Edit.xaml.cs UpdateChoiceExplanationPreviewWithDebounce ===");
+                        Debug.WriteLine($"tempExtractPath: {tempExtractPath}");
+                        Debug.WriteLine($"ChoiceExplanationPreviewLabel.ImageFolderPath (設定前): {ChoiceExplanationPreviewLabel.ImageFolderPath}");
+                        
+                        ChoiceExplanationPreviewLabel.ImageFolderPath = tempExtractPath;
                         ChoiceExplanationPreviewLabel.RichText = text;
                         ChoiceExplanationPreviewLabel.ShowAnswer = false;
-                        ChoiceExplanationPreviewLabel.ImageFolderPath = tempExtractPath;
+                        
+                        Debug.WriteLine($"ChoiceExplanationPreviewLabel.ImageFolderPath (設定後): {ChoiceExplanationPreviewLabel.ImageFolderPath}");
+                        Debug.WriteLine($"ChoiceExplanationPreviewLabel.RichText: {ChoiceExplanationPreviewLabel.RichText}");
                     }
                     catch (Exception ex)
                     {

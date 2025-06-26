@@ -465,6 +465,11 @@ namespace Flashnote.Services
                 ImageFolderPath = _tempExtractPath
             };
             
+            // デバッグ情報を出力
+            System.Diagnostics.Debug.WriteLine($"=== RichTextLabel作成 ===");
+            System.Diagnostics.Debug.WriteLine($"_tempExtractPath: {_tempExtractPath}");
+            System.Diagnostics.Debug.WriteLine($"FrontPreviewLabel.ImageFolderPath: {_frontPreviewLabel.ImageFolderPath}");
+            
             // 裏面
             var backHeaderLayout = new HorizontalStackLayout();
             var backLabel = new Label { Text = "裏面", FontSize = 16 };
@@ -496,6 +501,9 @@ namespace Flashnote.Services
             { 
                 ImageFolderPath = _tempExtractPath
             };
+            
+            // デバッグ情報を出力
+            System.Diagnostics.Debug.WriteLine($"BackPreviewLabel.ImageFolderPath: {_backPreviewLabel.ImageFolderPath}");
             
             _basicCardLayout.Children.Add(frontHeaderLayout);
             _basicCardLayout.Children.Add(_frontTextEditor);
@@ -601,6 +609,9 @@ namespace Flashnote.Services
                 ImageFolderPath = _tempExtractPath
             };
             
+            // デバッグ情報を出力
+            System.Diagnostics.Debug.WriteLine($"ChoiceQuestionPreviewLabel.ImageFolderPath: {_choiceQuestionPreviewLabel.ImageFolderPath}");
+            
             // 選択肢
             var choicesLabel = new Label { Text = "選択肢", FontSize = 16 };
             
@@ -650,6 +661,9 @@ namespace Flashnote.Services
                 HeightRequest = 80,
                 ImageFolderPath = _tempExtractPath
             };
+            
+            // デバッグ情報を出力
+            System.Diagnostics.Debug.WriteLine($"ChoiceExplanationPreviewLabel.ImageFolderPath: {_choiceExplanationPreviewLabel.ImageFolderPath}");
             
             _multipleChoiceLayout.Children.Add(choiceQuestionHeaderLayout);
             _multipleChoiceLayout.Children.Add(_choiceQuestion);
@@ -3082,35 +3096,6 @@ namespace Flashnote.Services
                 Debug.WriteLine($"キーイベント設定エラー: {ex.Message}");
                 Debug.WriteLine($"スタックトレース: {ex.StackTrace}");
             }
-        }
-
-        /// <summary>
-        /// リッチテキスト内容かどうかを判定
-        /// </summary>
-        private bool IsRichTextContent(string text)
-        {
-            if (string.IsNullOrEmpty(text)) return false;
-            
-            // HTMLタグが含まれているかチェック
-            if (text.Contains("<") && text.Contains(">"))
-            {
-                return true;
-            }
-            
-            // RTF形式かチェック
-            if (text.StartsWith("{\\rtf"))
-            {
-                return true;
-            }
-            
-            // 装飾文字が含まれているかチェック
-            if (text.Contains("**") || text.Contains("*") || text.Contains("__") || 
-                text.Contains("~~") || text.Contains("^^") || text.Contains("{{"))
-            {
-                return true;
-            }
-            
-            return false;
         }
 
         /// <summary>
