@@ -13,6 +13,7 @@ using System.Diagnostics;
 using Flashnote.Models;  // SentenceDataの名前空間を追加
 using SQLite;
 using Flashnote.Services;  // CardManagerの名前空間を追加
+using Flashnote_MAUI.Services;
 
 namespace Flashnote
 {
@@ -332,7 +333,7 @@ namespace Flashnote
             catch (Exception ex)
             {
                 Debug.WriteLine($"テキスト選択ボタンエラー: {ex.Message}");
-                await DisplayAlert("エラー", "テキスト選択機能でエラーが発生しました", "OK");
+                await UIThreadHelper.ShowAlertAsync("エラー", "テキスト選択機能でエラーが発生しました", "OK");
             }
         }
 
@@ -378,7 +379,7 @@ namespace Flashnote
             catch (Exception ex)
             {
                 Debug.WriteLine($"OnAddCardClicked エラー: {ex.Message}");
-                await DisplayAlert("エラー", "カード追加パネルの表示中にエラーが発生しました", "OK");
+                await UIThreadHelper.ShowAlertAsync("エラー", "カード追加パネルの表示中にエラーが発生しました", "OK");
             }
         }
 
@@ -439,7 +440,7 @@ namespace Flashnote
             catch (Exception ex)
             {
                 Debug.WriteLine($"Error loading PDF: {ex.Message}");
-                await DisplayAlert("エラー", $"PDFの読み込みに失敗しました: {ex.Message}", "OK");
+                await UIThreadHelper.ShowAlertAsync("エラー", $"PDFの読み込みに失敗しました: {ex.Message}", "OK");
             }
         }
 
@@ -473,7 +474,7 @@ namespace Flashnote
             catch (Exception ex)
             {
                 Debug.WriteLine($"Error loading image: {ex.Message}");
-                await DisplayAlert("エラー", $"画像の読み込みに失敗しました: {ex.Message}", "OK");
+                await UIThreadHelper.ShowAlertAsync("エラー", $"画像の読み込みに失敗しました: {ex.Message}", "OK");
             }
         }
 
@@ -559,7 +560,7 @@ namespace Flashnote
             catch (Exception ex)
             {
                 Debug.WriteLine($"Error importing file: {ex.Message}");
-                await DisplayAlert("エラー", $"ファイルのインポートに失敗しました: {ex.Message}", "OK");
+                await UIThreadHelper.ShowAlertAsync("エラー", $"ファイルのインポートに失敗しました: {ex.Message}", "OK");
             }
         }
 
@@ -578,12 +579,12 @@ namespace Flashnote
                 // 注意: この時点では具体的なファイルパスが分からないため、
                 // 実際のファイルが読み込まれた時にSaveContentDataAsyncが呼ばれることを想定
                 
-                await DisplayAlert("保存完了", "描画データを保存しました", "OK");
+                await UIThreadHelper.ShowAlertAsync("保存完了", "描画データを保存しました", "OK");
             }
             catch (Exception ex)
             {
                 Debug.WriteLine($"Error saving file: {ex.Message}");
-                await DisplayAlert("エラー", $"保存に失敗しました: {ex.Message}", "OK");
+                await UIThreadHelper.ShowAlertAsync("エラー", $"保存に失敗しました: {ex.Message}", "OK");
             }
         }
 
@@ -714,7 +715,7 @@ namespace Flashnote
                         selectPageCallback: async (pageIndex) => await ShowPageSelectionOverlay(pageIndex),
                         loadCurrentImageCallback: async () => await LoadCurrentImageAsImageFill(),
                         showToastCallback: async (message) => await ShowToast(message),
-                        showAlertCallback: async (title, message) => await DisplayAlert(title, message, "OK")
+                        showAlertCallback: async (title, message) => await UIThreadHelper.ShowAlertAsync(title, message, "OK")
                     );
                     
                     // ページ選択用画像追加コールバックを設定（新機能）
@@ -761,7 +762,7 @@ namespace Flashnote
             {
                 Debug.WriteLine($"カード追加パネル表示エラー: {ex.Message}");
                 Debug.WriteLine($"スタックトレース: {ex.StackTrace}");
-                await DisplayAlert("エラー", "カード追加パネルの表示中にエラーが発生しました", "OK");
+                await UIThreadHelper.ShowAlertAsync("エラー", "カード追加パネルの表示中にエラーが発生しました", "OK");
             }
         }
         
@@ -879,7 +880,7 @@ namespace Flashnote
                 if (!(_backgroundCanvas?.HasContent == true))
                 {
                     Debug.WriteLine($"コンテンツが利用できません - BackgroundCanvas: {_backgroundCanvas != null}, HasContent: {_backgroundCanvas?.HasContent}");
-                    await DisplayAlert("エラー", "表示されているコンテンツがありません", "OK");
+                    await UIThreadHelper.ShowAlertAsync("エラー", "表示されているコンテンツがありません", "OK");
                     return;
                 }
 
@@ -905,7 +906,7 @@ namespace Flashnote
             catch (Exception ex)
             {
                 Debug.WriteLine($"ページ選択エラー: {ex.Message}");
-                await DisplayAlert("エラー", "ページ選択中にエラーが発生しました", "OK");
+                await UIThreadHelper.ShowAlertAsync("エラー", "ページ選択中にエラーが発生しました", "OK");
             }
         }
 
@@ -1083,7 +1084,7 @@ namespace Flashnote
             catch (Exception ex)
             {
                 Debug.WriteLine($"ページ選択確定エラー: {ex.Message}");
-                await DisplayAlert("エラー", "ページ選択中にエラーが発生しました", "OK");
+                await UIThreadHelper.ShowAlertAsync("エラー", "ページ選択中にエラーが発生しました", "OK");
                 
                 // エラー時もフェードアウトを確実に実行
                 await HidePageSelectionOverlay();
@@ -1228,7 +1229,7 @@ namespace Flashnote
                 int currentPageIndex = GetCurrentPageIndex();
                 if (currentPageIndex < 0)
                 {
-                    await DisplayAlert("エラー", "現在のページを取得できませんでした", "OK");
+                    await UIThreadHelper.ShowAlertAsync("エラー", "現在のページを取得できませんでした", "OK");
                     return;
                 }
 
@@ -1307,12 +1308,12 @@ namespace Flashnote
                         }
                         else
                         {
-                            await DisplayAlert("エラー", "ページの画像化に失敗しました", "OK");
+                            await UIThreadHelper.ShowAlertAsync("エラー", "ページの画像化に失敗しました", "OK");
                         }
                     }
                     else
                     {
-                        await DisplayAlert("エラー", "ページ画像が見つかりません", "OK");
+                        await UIThreadHelper.ShowAlertAsync("エラー", "ページ画像が見つかりません", "OK");
                     }
                 }
                 finally
@@ -1324,7 +1325,7 @@ namespace Flashnote
             catch (Exception ex)
             {
                 Debug.WriteLine($"ページ画像追加エラー: {ex.Message}");
-                await DisplayAlert("エラー", "ページの画像化中にエラーが発生しました", "OK");
+                await UIThreadHelper.ShowAlertAsync("エラー", "ページの画像化中にエラーが発生しました", "OK");
             }
         }
 

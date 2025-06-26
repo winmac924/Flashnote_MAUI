@@ -18,6 +18,7 @@ using System.Linq;
 using Windows.System;
 using Microsoft.Extensions.Logging;
 using SQLite;
+using Flashnote_MAUI.Services;
 
 namespace Flashnote.Services
 {
@@ -1632,7 +1633,7 @@ namespace Flashnote.Services
             try
             {
                 // 確認アラート
-                bool result = await Application.Current.MainPage.DisplayAlert("確認", "現在の画像と選択範囲を消去しますか？", "はい", "いいえ");
+                bool result = await UIThreadHelper.ShowAlertAsync("確認", "現在の画像と選択範囲を消去しますか？", "はい", "いいえ");
                 if (!result) return;
 
                 // 画像とデータをクリア
@@ -1645,14 +1646,14 @@ namespace Flashnote.Services
                 // キャンバスを再描画
                 _canvasView?.InvalidateSurface();
 
-                await Application.Current.MainPage.DisplayAlert("完了", "画像を消去しました", "OK");
+                await UIThreadHelper.ShowAlertAsync("完了", "画像を消去しました", "OK");
                 
                 Debug.WriteLine("画像穴埋めの画像と選択範囲を消去");
             }
             catch (Exception ex)
             {
                 Debug.WriteLine($"画像消去エラー: {ex.Message}");
-                await Application.Current.MainPage.DisplayAlert("エラー", "画像の消去中にエラーが発生しました", "OK");
+                await UIThreadHelper.ShowAlertAsync("エラー", "画像の消去中にエラーが発生しました", "OK");
             }
         }
 
@@ -2060,7 +2061,7 @@ namespace Flashnote.Services
                         }
                         else
                         {
-                            await Application.Current.MainPage.DisplayAlert("エラー", "カードタイプが選択されていません。", "OK");
+                            await UIThreadHelper.ShowAlertAsync("エラー", "カードタイプが選択されていません。", "OK");
                         }
                         return;
                 }
@@ -2091,7 +2092,7 @@ namespace Flashnote.Services
                 }
                 else
                 {
-                    await Application.Current.MainPage.DisplayAlert("エラー", "カードの保存に失敗しました。", "OK");
+                    await UIThreadHelper.ShowAlertAsync("エラー", "カードの保存に失敗しました。", "OK");
                 }
             }
         }
@@ -2114,7 +2115,7 @@ namespace Flashnote.Services
                     }
                     else
                     {
-                        await Application.Current.MainPage.DisplayAlert("エラー", "表面を入力してください。", "OK");
+                        await UIThreadHelper.ShowAlertAsync("エラー", "表面を入力してください。", "OK");
                     }
                     return;
                 }
@@ -2163,7 +2164,7 @@ namespace Flashnote.Services
                     }
                     else
                     {
-                        await Application.Current.MainPage.DisplayAlert("エラー", "選択肢問題を入力してください。", "OK");
+                        await UIThreadHelper.ShowAlertAsync("エラー", "選択肢問題を入力してください。", "OK");
                     }
                     return;
                 }
@@ -2196,7 +2197,7 @@ namespace Flashnote.Services
                     }
                     else
                     {
-                        await Application.Current.MainPage.DisplayAlert("エラー", "最低1つの選択肢を入力してください。", "OK");
+                        await UIThreadHelper.ShowAlertAsync("エラー", "最低1つの選択肢を入力してください。", "OK");
                     }
                     return;
                 }
@@ -2243,7 +2244,7 @@ namespace Flashnote.Services
                     }
                     else
                     {
-                        await Application.Current.MainPage.DisplayAlert("エラー", "画像を選択してください。", "OK");
+                        await UIThreadHelper.ShowAlertAsync("エラー", "画像を選択してください。", "OK");
                     }
                     return;
                 }
@@ -2256,7 +2257,7 @@ namespace Flashnote.Services
                     }
                     else
                     {
-                        await Application.Current.MainPage.DisplayAlert("エラー", "穴埋め範囲を選択してください。", "OK");
+                        await UIThreadHelper.ShowAlertAsync("エラー", "穴埋め範囲を選択してください。", "OK");
                     }
                     return;
                 }

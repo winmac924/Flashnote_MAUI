@@ -3,6 +3,7 @@ using System;
 using System.Diagnostics;
 using System.Threading.Tasks;
 using Firebase.Auth;
+using Flashnote_MAUI.Services;
 
 namespace Flashnote
 {
@@ -89,17 +90,17 @@ namespace Flashnote
             {
                 if (string.IsNullOrWhiteSpace(EmailEntry.Text) || string.IsNullOrWhiteSpace(PasswordEntry.Text))
                 {
-                    await DisplayAlert("エラー", "メールアドレスとパスワードを入力してください。", "OK");
+                    await UIThreadHelper.ShowAlertAsync("エラー", "メールアドレスとパスワードを入力してください。", "OK");
                     return;
                 }
 
                 await App.SaveLoginInfo(EmailEntry.Text.Trim(), PasswordEntry.Text);
-                await DisplayAlert("成功", "ログイン情報を保存しました。", "OK");
+                await UIThreadHelper.ShowAlertAsync("成功", "ログイン情報を保存しました。", "OK");
             }
             catch (Exception ex)
             {
                 Debug.WriteLine($"ログイン情報の保存中にエラー: {ex.Message}");
-                await DisplayAlert("エラー", "ログイン情報の保存に失敗しました。", "OK");
+                await UIThreadHelper.ShowAlertAsync("エラー", "ログイン情報の保存に失敗しました。", "OK");
             }
         }
 
@@ -109,7 +110,7 @@ namespace Flashnote
             {
                 if (string.IsNullOrWhiteSpace(EmailEntry.Text) || string.IsNullOrWhiteSpace(PasswordEntry.Text))
                 {
-                    await DisplayAlert("エラー", "メールアドレスとパスワードを入力してください。", "OK");
+                    await UIThreadHelper.ShowAlertAsync("エラー", "メールアドレスとパスワードを入力してください。", "OK");
                     return;
                 }
 
@@ -126,11 +127,11 @@ namespace Flashnote
                     App.CurrentUser = userCredential.User;
                     await App.SaveLoginInfo(EmailEntry.Text.Trim(), PasswordEntry.Text);
                     UpdateLoginStatus();
-                    await DisplayAlert("成功", "ログインに成功しました。", "OK");
+                    await UIThreadHelper.ShowAlertAsync("成功", "ログインに成功しました。", "OK");
                 }
                 else
                 {
-                    await DisplayAlert("エラー", "ログインに失敗しました。", "OK");
+                    await UIThreadHelper.ShowAlertAsync("エラー", "ログインに失敗しました。", "OK");
                 }
             }
             catch (FirebaseAuthException authEx)
@@ -154,12 +155,12 @@ namespace Flashnote
                         break;
                 }
                 
-                await DisplayAlert("ログインエラー", errorMessage, "OK");
+                await UIThreadHelper.ShowAlertAsync("ログインエラー", errorMessage, "OK");
             }
             catch (Exception ex)
             {
                 Debug.WriteLine($"ログイン中にエラー: {ex.Message}");
-                await DisplayAlert("エラー", "ログイン処理中にエラーが発生しました。", "OK");
+                await UIThreadHelper.ShowAlertAsync("エラー", "ログイン処理中にエラーが発生しました。", "OK");
             }
             finally
             {
@@ -173,7 +174,7 @@ namespace Flashnote
         {
             try
             {
-                bool result = await DisplayAlert("確認", "ログイン情報をクリアしますか？", "はい", "いいえ");
+                bool result = await UIThreadHelper.ShowAlertAsync("確認", "ログイン情報をクリアしますか？", "はい", "いいえ");
                 if (result)
                 {
                     EmailEntry.Text = string.Empty;
@@ -181,13 +182,13 @@ namespace Flashnote
                     await App.ClearLoginInfo();
                     App.CurrentUser = null;
                     UpdateLoginStatus();
-                    await DisplayAlert("完了", "ログイン情報をクリアしました。", "OK");
+                    await UIThreadHelper.ShowAlertAsync("完了", "ログイン情報をクリアしました。", "OK");
                 }
             }
             catch (Exception ex)
             {
                 Debug.WriteLine($"ログイン情報のクリア中にエラー: {ex.Message}");
-                await DisplayAlert("エラー", "ログイン情報のクリアに失敗しました。", "OK");
+                await UIThreadHelper.ShowAlertAsync("エラー", "ログイン情報のクリアに失敗しました。", "OK");
             }
         }
 
@@ -200,7 +201,7 @@ namespace Flashnote
             catch (Exception ex)
             {
                 Debug.WriteLine($"MainPageへの移動中にエラー: {ex.Message}");
-                await DisplayAlert("エラー", "MainPageへの移動に失敗しました。", "OK");
+                await UIThreadHelper.ShowAlertAsync("エラー", "MainPageへの移動に失敗しました。", "OK");
             }
         }
     }

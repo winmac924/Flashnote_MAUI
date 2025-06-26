@@ -14,6 +14,7 @@ using SkiaSharp;
 using System.Web;
 using System.Text;
 using System.Timers;
+using Flashnote_MAUI.Services;
 
 namespace Flashnote
 {
@@ -119,7 +120,7 @@ namespace Flashnote
             LoadCards();
             LoadAndSortCards();
             InitializeTheme();
-            DisplayCard();
+            _ = DisplayCard();
             
             // アプリ起動時の同期を実行
             _ = InitializeLearningResultSync();
@@ -137,7 +138,7 @@ namespace Flashnote
             LoadAndSortCards();
             Debug.WriteLine($"Loaded {cards.Count} cards");
             InitializeTheme();
-            DisplayCard();
+            _ = DisplayCard();
         }
 
         private void InitializeTheme()
@@ -155,9 +156,9 @@ namespace Flashnote
             this.BackgroundColor = ThemeColors.BackgroundColor;
             
             // 現在表示中のカードを再描画
-            MainThread.BeginInvokeOnMainThread(() =>
+            MainThread.BeginInvokeOnMainThread(async () =>
             {
-                DisplayCard();
+                await DisplayCard();
                 CanvasView?.InvalidateSurface();
             });
         }
@@ -338,7 +339,7 @@ namespace Flashnote
             }
         }
         // 問題を表示
-        private void DisplayCard()
+        private async Task DisplayCard()
         {
             try
             {
@@ -354,7 +355,7 @@ namespace Flashnote
                 {
                     Debug.WriteLine("すべての問題が出題されました");
                     // 復習が必要なカードがあるかチェック
-                    ShowReviewNeededCards();
+                    await ShowReviewNeededCards();
                     return;
                 }
 
@@ -386,13 +387,13 @@ namespace Flashnote
                     Debug.WriteLine($"Unknown card type: {card.type}");
                     // 不明なカードタイプの場合は次のカードへ
                     currentIndex++;
-                    DisplayCard();
+                    await DisplayCard();
                 }
             }
             catch (Exception ex)
             {
                 Debug.WriteLine($"Error in DisplayCard: {ex}");
-                DisplayAlert("Error", "Failed to display card", "OK");
+                await UIThreadHelper.ShowAlertAsync("Error", "Failed to display card", "OK");
             }
         }
         // 基本カードを解析
@@ -582,14 +583,14 @@ namespace Flashnote
                     Debug.WriteLine($"画像が存在しません: {selectedImagePath}");
                     Debug.WriteLine($"探索パス: {selectedImagePath}");
                     Debug.WriteLine($"imgフォルダ内容: {string.Join(", ", Directory.GetFiles(imageFolder))}");
-                    await DisplayAlert("エラー", "画像が存在しません。", "OK");
+                    await UIThreadHelper.ShowAlertAsync("エラー", "画像が存在しません。", "OK");
                     return;
                 }
             }
             else
             {
                 Debug.WriteLine($"画像ファイル名が取得できません。card.front: '{card.front}', JSONデータ確認が必要");
-                await DisplayAlert("エラー", "画像パスが無効です。", "OK");
+                await UIThreadHelper.ShowAlertAsync("エラー", "画像パスが無効です。", "OK");
                 return;
             }
 
@@ -870,25 +871,24 @@ namespace Flashnote
             }
         }
 
-        private void OnNextClicked(object sender, EventArgs e)
+        private async void OnNextClicked(object sender, EventArgs e)
         {
             try
             {
                 currentIndex++;
-                ShowAnswerButton.IsVisible = true;
                 NextButton.IsVisible = false;
                 Debug.WriteLine($"次の問題へ移動: {currentIndex + 1}/{cards.Count}");
-                DisplayCard();
+                await DisplayCard();
             }
             catch (Exception ex)
             {
                 Debug.WriteLine($"Error in OnNextClicked: {ex}");
-                DisplayAlert("Error", "Failed to move to next card", "OK");
+                await UIThreadHelper.ShowAlertAsync("Error", "Failed to move to next card", "OK");
             }
         }
 
         // 正解ボタン
-        private void OnCorrectClicked(object sender, EventArgs e)
+        private async void OnCorrectClicked(object sender, EventArgs e)
         {
             try
             {
@@ -927,17 +927,17 @@ namespace Flashnote
                 Incorrect.IsVisible = false;
                 SeparatorGrid.IsVisible = false;
                 ShowAnswerButton.IsVisible = true;
-                DisplayCard();
+                await DisplayCard();
             }
             catch (Exception ex)
             {
                 Debug.WriteLine($"Error in OnCorrectClicked: {ex}");
-                DisplayAlert("Error", "Failed to process correct answer", "OK");
+                await UIThreadHelper.ShowAlertAsync("Error", "Failed to process correct answer", "OK");
             }
         }
 
         // 不正解ボタン
-        private void OnIncorrectClicked(object sender, EventArgs e)
+        private async void OnIncorrectClicked(object sender, EventArgs e)
         {
             try
             {
@@ -975,12 +975,12 @@ namespace Flashnote
                 Incorrect.IsVisible = false;
                 SeparatorGrid.IsVisible = false;
                 ShowAnswerButton.IsVisible = true;
-                DisplayCard();
+                await DisplayCard();
             }
             catch (Exception ex)
             {
                 Debug.WriteLine($"Error in OnIncorrectClicked: {ex}");
-                DisplayAlert("Error", "Failed to process incorrect answer", "OK");
+                await UIThreadHelper.ShowAlertAsync("Error", "Failed to process incorrect answer", "OK");
             }
         }
 
@@ -1370,7 +1370,7 @@ namespace Flashnote
         }
 
         // 復習が必要なカードを表示
-        private void ShowReviewNeededCards()
+        private async Task ShowReviewNeededCards()
         {
             var now = DateTime.Now;
             var reviewNeededCards = cards.Where(card =>
@@ -1387,12 +1387,12 @@ namespace Flashnote
                 showAnswer = false;
                 
                 Debug.WriteLine($"復習カードで継続: {sortedCards.Count}件");
-                DisplayCard();
+                await DisplayCard();
             }
             else
             {
                 Debug.WriteLine("すべての問題が完了しました");
-                DisplayAlert("完了", "すべての問題が出題されました。", "OK");
+                await UIThreadHelper.ShowAlertAsync("完了", "すべての問題が出題されました。", "OK");
                 Navigation.PopAsync();
             }
         }
@@ -1434,7 +1434,7 @@ namespace Flashnote
             catch (Exception ex)
             {
                 Debug.WriteLine($"画像拡大表示エラー: {ex.Message}");
-                await DisplayAlert("エラー", "画像の拡大表示に失敗しました。", "OK");
+                await UIThreadHelper.ShowAlertAsync("エラー", "画像の拡大表示に失敗しました。", "OK");
             }
         }
 

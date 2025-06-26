@@ -1,4 +1,7 @@
 using Microsoft.Extensions.Logging;
+using Microsoft.Maui.Storage;
+using System.Text.Json;
+using Flashnote_MAUI.Services;
 namespace Flashnote.Services;
 
 public class UpdateNotificationService
@@ -15,37 +18,35 @@ public class UpdateNotificationService
     }
 
     /// <summary>
-    /// 初回起動時のみ更新確認を実行
+    /// 初回起動時にアップデート確認を実行
     /// </summary>
     public async Task CheckForUpdatesOnFirstLaunchAsync()
     {
         try
         {
-            // 初回起動かどうかをチェック
-            var isFirstLaunch = await IsFirstLaunchAsync();
-            
-            if (!isFirstLaunch)
+            if (await IsFirstLaunchAsync())
             {
-                _logger.LogInformation("初回起動ではないため、更新確認をスキップします");
-                return;
+                _logger.LogInformation("初回起動を検出しました - アップデート確認を実行します");
+                
+                // 初回起動フラグを設定
+                await MarkFirstLaunchCompletedAsync();
+                
+                // アップデート確認を実行
+                await CheckForUpdatesAsync();
             }
-
-            _logger.LogInformation("初回起動を検出しました。更新確認を実行します");
-            
-            // 更新確認を実行
-            await CheckForUpdatesAsync();
-            
-            // 初回起動完了をマーク
-            await MarkFirstLaunchCompletedAsync();
+            else
+            {
+                _logger.LogInformation("初回起動ではありません - アップデート確認をスキップします");
+            }
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "初回起動時の更新確認中にエラーが発生しました");
+            _logger.LogError(ex, "初回起動時のアップデート確認中にエラーが発生しました");
         }
     }
 
     /// <summary>
-    /// 初回起動かどうかを判定
+    /// 初回起動かどうかを確認
     /// </summary>
     private async Task<bool> IsFirstLaunchAsync()
     {
@@ -56,24 +57,24 @@ public class UpdateNotificationService
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "初回起動判定中にエラーが発生しました");
-            return true; // エラーの場合は初回起動として扱う
+            _logger.LogError(ex, "初回起動フラグの確認中にエラーが発生しました");
+            return false;
         }
     }
 
     /// <summary>
-    /// 初回起動完了をマーク
+    /// 初回起動完了フラグを設定
     /// </summary>
     private async Task MarkFirstLaunchCompletedAsync()
     {
         try
         {
-            await SecureStorage.SetAsync(FirstLaunchKey, DateTime.Now.ToString());
-            _logger.LogInformation("初回起動完了をマークしました");
+            await SecureStorage.SetAsync(FirstLaunchKey, DateTime.UtcNow.ToString("O"));
+            _logger.LogInformation("初回起動完了フラグを設定しました");
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "初回起動完了のマーク中にエラーが発生しました");
+            _logger.LogError(ex, "初回起動完了フラグの設定中にエラーが発生しました");
         }
     }
 
@@ -143,7 +144,7 @@ public class UpdateNotificationService
                          $"📋 更新内容:\n{updateInfo.ReleaseNotes}\n\n" +
                          $"今すぐダウンロードしますか？";
 
-            var result = await Application.Current.MainPage.DisplayAlert(
+            var result = await UIThreadHelper.ShowAlertAsync(
                 title,
                 message,
                 "ダウンロード",
@@ -171,7 +172,7 @@ public class UpdateNotificationService
         try
         {
             // 最終確認
-            var confirmResult = await Application.Current.MainPage.DisplayAlert(
+            var confirmResult = await UIThreadHelper.ShowAlertAsync(
                 "🔄 アップデート実行",
                 "アップデートを実行します。\n\n処理内容：\n1. 新しいバージョンをダウンロード\n2. アプリケーションを終了\n3. ファイルを自動更新\n4. 新しいバージョンを起動\n\n実行しますか？",
                 "実行する",
@@ -256,7 +257,7 @@ public class UpdateNotificationService
             else
             {
                 // 進捗ページが表示されていない場合は従来の方法でエラーを表示
-                await Application.Current.MainPage.DisplayAlert(
+                await UIThreadHelper.ShowAlertAsync(
                     "❌ アップデートエラー",
                     $"アップデート中にエラーが発生しました。\n\n手動でアップデートしてください：\n1. https://github.com/winmac924/Flashnote_MAUI/releases\n2. 最新の .exe ファイルをダウンロード\n3. 現在のファイルを置き換え\n\nエラー詳細: {ex.Message}",
                     "OK"
