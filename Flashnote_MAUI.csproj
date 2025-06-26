@@ -32,7 +32,7 @@
 		<VersionPrefix>2.0.1</VersionPrefix>
 		<VersionSuffix Condition="'$(Configuration)' == 'Debug'">dev</VersionSuffix>
 		<AssemblyVersion>2.0.1.0</AssemblyVersion>
-		<FileVersion>2.0.1s.0</FileVersion>
+		<FileVersion>2.0.1.0</FileVersion>
 
 		<!-- Windows配布設定 - EXE形式 -->
 		<WindowsPackageType>None</WindowsPackageType>
@@ -128,6 +128,7 @@
 	</ItemGroup>
 
 </Project>
+
 
 
 
