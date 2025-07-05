@@ -418,6 +418,35 @@ namespace Flashnote.Views
             _scrollStopTimer = new System.Timers.Timer(SCROLL_STOP_DELAY);
             _scrollStopTimer.Elapsed += OnScrollStopped;
             _scrollStopTimer.AutoReset = false; // 一回だけ実行
+            
+            // 一時ディレクトリの初期化を遅延実行
+            _ = Task.Run(() => InitializeTempDirectoryAsync());
+        }
+
+        private async Task InitializeTempDirectoryAsync()
+        {
+            try
+            {
+                var tempPath = Path.GetTempPath();
+                _tempDirectory = Path.Combine(tempPath, "Flashnote", "Temp");
+                
+                if (!Directory.Exists(_tempDirectory))
+                {
+                    Directory.CreateDirectory(_tempDirectory);
+                }
+                
+                var cacheDir = Path.Combine(_tempDirectory, PAGE_CACHE_DIR);
+                if (!Directory.Exists(cacheDir))
+                {
+                    Directory.CreateDirectory(cacheDir);
+                }
+                
+                Debug.WriteLine($"一時ディレクトリ初期化完了: {_tempDirectory}");
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"一時ディレクトリ初期化エラー: {ex.Message}");
+            }
         }
 
         public ScrollView ParentScrollView
@@ -1208,12 +1237,21 @@ namespace Flashnote.Views
 
         public void InitializeCacheDirectory(string noteName, string tempDir)
         {
+            // 既に初期化済みの場合はスキップ
+            if (!string.IsNullOrEmpty(_tempDirectory) && Directory.Exists(_tempDirectory))
+            {
+                Debug.WriteLine($"キャッシュディレクトリは既に初期化済み: {_tempDirectory}");
+                return;
+            }
+            
             _tempDirectory = tempDir;
             var cacheDir = Path.Combine(_tempDirectory, PAGE_CACHE_DIR);
             if (!Directory.Exists(cacheDir))
             {
                 Directory.CreateDirectory(cacheDir);
             }
+            
+            Debug.WriteLine($"キャッシュディレクトリ初期化完了: {cacheDir}");
         }
 
         public void Dispose()

@@ -14,6 +14,9 @@ public static class MauiProgram
 		// エンコーディングプロバイダーを登録（Shift_JIS等のサポート）
 		Encoding.RegisterProvider(CodePagesEncodingProvider.Instance);
 		
+		// WebView2の初期化を実行
+		_ = WebView2InitializationService.InitializeAsync();
+		
 		var builder = MauiApp.CreateBuilder();
 		builder
 			.UseMauiApp<App>()
@@ -39,10 +42,13 @@ public static class MauiProgram
 		builder.Services.AddSingleton<AnkiExporter>();
 		builder.Services.AddSingleton<AnkiImporter>();
 		
-		// HTTP Client の登録
-		builder.Services.AddHttpClient<GitHubUpdateService>();
+		// HTTP Client の登録（遅延初期化）
+		builder.Services.AddHttpClient<GitHubUpdateService>(client =>
+		{
+			client.Timeout = TimeSpan.FromSeconds(30);
+		});
 		
-		// アップデート関連サービス
+		// アップデート関連サービス（遅延初期化）
 		builder.Services.AddSingleton<GitHubUpdateService>();
 		builder.Services.AddSingleton<UpdateNotificationService>();
 

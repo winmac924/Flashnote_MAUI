@@ -29,10 +29,35 @@ namespace Flashnote
             _configService = configService;
             _fileWatcherService = fileWatcherService;
 
+            // 軽量な初期化のみを同期的に実行
             CleanupBackupFiles();
-            InitializeFirebase();
-            InitializeAzureBlobStorage();
+            
+            // WebView2の初期化を実行
+            _ = WebView2InitializationService.InitializeAsync();
+            
+            // 重い初期化処理は非同期で実行
+            _ = Task.Run(async () =>
+            {
+                try
+                {
+                    await InitializeHeavyServicesAsync();
+                }
+                catch (Exception ex)
+                {
+                    Debug.WriteLine($"重い初期化処理でエラー: {ex.Message}");
+                }
+            });
+            
             InitializeMainPage();
+        }
+
+        private async Task InitializeHeavyServicesAsync()
+        {
+            // Firebase認証の初期化
+            await Task.Run(() => InitializeFirebase());
+            
+            // Azure Blob Storageの初期化
+            await Task.Run(() => InitializeAzureBlobStorage());
         }
 
         private void InitializeFirebase()

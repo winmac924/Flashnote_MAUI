@@ -43,6 +43,9 @@
 		<IncludeNativeLibrariesForSelfExtract>true</IncludeNativeLibrariesForSelfExtract>
 		<PublishTrimmed>false</PublishTrimmed>
 
+		<!-- WebView2設定 -->
+		<WebView2UserDataFolder Condition="$([MSBuild]::IsOSPlatform('windows'))">%LOCALAPPDATA%\Flashnote\WebView2</WebView2UserDataFolder>
+
 		<!-- MSIX設定 -->
 		<PackageCertificateKeyFile Condition="$([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) == 'windows'">Package_TemporaryKey.pfx</PackageCertificateKeyFile>
 		<PackageCertificatePassword Condition="$([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) == 'windows'">password</PackageCertificatePassword>
