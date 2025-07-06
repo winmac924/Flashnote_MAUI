@@ -822,115 +822,142 @@ namespace Flashnote.Services
         /// <summary>
         /// 太字ボタンのクリックイベント
         /// </summary>
-        private void OnBoldClicked(object sender, EventArgs e)
+        private async void OnBoldClicked(object sender, EventArgs e)
         {
             var editor = GetCurrentEditor();
             if (editor != null)
             {
                 InsertDecorationText(editor, "**", "**");
+                // 追加のフォーカス復元
+                await Task.Delay(200);
+                await RestoreFocusToEditor(editor);
             }
         }
 
         /// <summary>
         /// 赤色ボタンのクリックイベント
         /// </summary>
-        private void OnRedColorClicked(object sender, EventArgs e)
+        private async void OnRedColorClicked(object sender, EventArgs e)
         {
             var editor = GetCurrentEditor();
             if (editor != null)
             {
                 InsertDecorationText(editor, "{{red|", "}}");
+                // 追加のフォーカス復元
+                await Task.Delay(200);
+                await RestoreFocusToEditor(editor);
             }
         }
 
         /// <summary>
         /// 青色ボタンのクリックイベント
         /// </summary>
-        private void OnBlueColorClicked(object sender, EventArgs e)
+        private async void OnBlueColorClicked(object sender, EventArgs e)
         {
             var editor = GetCurrentEditor();
             if (editor != null)
             {
                 InsertDecorationText(editor, "{{blue|", "}}");
+                // 追加のフォーカス復元
+                await Task.Delay(200);
+                await RestoreFocusToEditor(editor);
             }
         }
 
         /// <summary>
         /// 緑色ボタンのクリックイベント
         /// </summary>
-        private void OnGreenColorClicked(object sender, EventArgs e)
+        private async void OnGreenColorClicked(object sender, EventArgs e)
         {
             var editor = GetCurrentEditor();
             if (editor != null)
             {
                 InsertDecorationText(editor, "{{green|", "}}");
+                // 追加のフォーカス復元
+                await Task.Delay(200);
+                await RestoreFocusToEditor(editor);
             }
         }
 
         /// <summary>
         /// 黄色ボタンのクリックイベント
         /// </summary>
-        private void OnYellowColorClicked(object sender, EventArgs e)
+        private async void OnYellowColorClicked(object sender, EventArgs e)
         {
             var editor = GetCurrentEditor();
             if (editor != null)
             {
                 InsertDecorationText(editor, "{{yellow|", "}}");
+                // 追加のフォーカス復元
+                await Task.Delay(200);
+                await RestoreFocusToEditor(editor);
             }
         }
 
         /// <summary>
         /// 紫色ボタンのクリックイベント
         /// </summary>
-        private void OnPurpleColorClicked(object sender, EventArgs e)
+        private async void OnPurpleColorClicked(object sender, EventArgs e)
         {
             var editor = GetCurrentEditor();
             if (editor != null)
             {
                 InsertDecorationText(editor, "{{purple|", "}}");
+                // 追加のフォーカス復元
+                await Task.Delay(200);
+                await RestoreFocusToEditor(editor);
             }
         }
 
         /// <summary>
         /// オレンジ色ボタンのクリックイベント
         /// </summary>
-        private void OnOrangeColorClicked(object sender, EventArgs e)
+        private async void OnOrangeColorClicked(object sender, EventArgs e)
         {
             var editor = GetCurrentEditor();
             if (editor != null)
             {
                 InsertDecorationText(editor, "{{orange|", "}}");
+                // 追加のフォーカス復元
+                await Task.Delay(200);
+                await RestoreFocusToEditor(editor);
             }
         }
 
         /// <summary>
         /// 上付き文字ボタンのクリックイベント
         /// </summary>
-        private void OnSuperscriptClicked(object sender, EventArgs e)
+        private async void OnSuperscriptClicked(object sender, EventArgs e)
         {
             var editor = GetCurrentEditor();
             if (editor != null)
             {
                 InsertDecorationText(editor, "^^", "^^");
+                // 追加のフォーカス復元
+                await Task.Delay(200);
+                await RestoreFocusToEditor(editor);
             }
         }
 
         /// <summary>
         /// 下付き文字ボタンのクリックイベント
         /// </summary>
-        private void OnSubscriptClicked(object sender, EventArgs e)
+        private async void OnSubscriptClicked(object sender, EventArgs e)
         {
             var editor = GetCurrentEditor();
             if (editor != null)
             {
                 InsertDecorationText(editor, "~~", "~~");
+                // 追加のフォーカス復元
+                await Task.Delay(200);
+                await RestoreFocusToEditor(editor);
             }
         }
 
         /// <summary>
         /// 穴埋めボタンのクリックイベント
         /// </summary>
-        private void OnBlankClicked(object sender, EventArgs e)
+        private async void OnBlankClicked(object sender, EventArgs e)
         {
             var editor = GetCurrentEditor();
             
@@ -939,6 +966,9 @@ namespace Flashnote.Services
             {
                 Debug.WriteLine($"穴埋めを挿入: {editor.AutomationId}");
                 InsertBlankText(editor);
+                // 追加のフォーカス復元
+                await Task.Delay(200);
+                await RestoreFocusToEditor(editor);
             }
             else
             {
@@ -947,7 +977,7 @@ namespace Flashnote.Services
         }
 
         /// <summary>
-        /// 穴埋めテキストを挿入（かっこがある場合は削除）
+        /// 穴埋めテキストを挿入または解除（かっこがある場合は削除）
         /// </summary>
         private async void InsertBlankText(Editor editor)
         {
@@ -987,13 +1017,30 @@ namespace Flashnote.Services
                 }
                 else
                 {
-                    // 選択されたテキストがない場合はカーソル位置に穴埋めタグを挿入
-                    string insertText = "<<blank|>>";
-                    await InsertAtCursor(editor, insertText, 8); // "<<blank|" の後にカーソルを配置
+                    // 選択されたテキストがない場合は、カーソル位置が穴埋め内かチェック
+                    var blankInfo = CheckIfCursorInBlank(editor);
+                    
+                    if (blankInfo.IsInBlank)
+                    {
+                        // 穴埋め内にカーソルがある場合は穴埋めを解除
+                        await RemoveBlank(editor, blankInfo);
+                    }
+                    else
+                    {
+                        // 穴埋め内にない場合は穴埋めタグを挿入
+                        string insertText = "<<blank|>>";
+                        await InsertAtCursor(editor, insertText, 8); // "<<blank|" の後にカーソルを配置
+                        
+                        // 穴埋めのテキスト部分にカーソルを配置
+                        Debug.WriteLine($"穴埋め挿入完了: '{insertText}', カーソル位置: {editor.CursorPosition}");
+                    }
                 }
 
                 // プレビューを更新
                 UpdatePreviewForEditor(editor);
+                
+                // フォーカスをエディターに戻す
+                await RestoreFocusToEditor(editor);
             }
             catch (Exception ex)
             {
@@ -1002,6 +1049,9 @@ namespace Flashnote.Services
                 string insertText = "<<blank|>>";
                 await InsertAtCursor(editor, insertText, 8);
                 UpdatePreviewForEditor(editor);
+                
+                // エラー時もフォーカスを戻す
+                await RestoreFocusToEditor(editor);
             }
         }
 
@@ -1382,8 +1432,8 @@ namespace Flashnote.Services
             await AddImage(_choiceQuestionExplanation);
         }
 
-        /// <summary>
-        /// 装飾文字を挿入するヘルパーメソッド
+                /// <summary>
+        /// 装飾文字を挿入または解除するヘルパーメソッド
         /// </summary>
         private async void InsertDecorationText(Editor editor, string prefix, string suffix = "")
         {
@@ -1420,13 +1470,52 @@ namespace Flashnote.Services
                 }
                 else
                 {
-                    // 選択されたテキストがない場合はカーソル位置に装飾タグを挿入
-                    string insertText = prefix + suffix;
-                    await InsertAtCursor(editor, insertText, prefix.Length);
+                    // 色装飾の場合は色変更機能をチェック
+                    if (IsColorDecoration(prefix))
+                    {
+                        var colorChangeInfo = CheckIfCursorInColorDecoration(editor);
+                        if (colorChangeInfo.IsInColorDecoration)
+                        {
+                            // 色装飾内にカーソルがある場合は色を変更
+                            await ChangeColorDecoration(editor, colorChangeInfo, prefix);
+                        }
+                        else
+                        {
+                            // 色装飾内にない場合は装飾タグを挿入
+                            string insertText = prefix + suffix;
+                            await InsertAtCursor(editor, insertText, prefix.Length);
+                            
+                            // 色装飾のテキスト部分にカーソルを配置
+                            Debug.WriteLine($"色装飾挿入完了: '{insertText}', カーソル位置: {editor.CursorPosition}");
+                        }
+                    }
+                    else
+                    {
+                        // 通常の装飾文字の場合は従来の処理
+                        var decorationInfo = CheckIfCursorInDecoration(editor, prefix, suffix);
+                        
+                        if (decorationInfo.IsInDecoration)
+                        {
+                            // 装飾文字内にカーソルがある場合は装飾を解除
+                            await RemoveDecoration(editor, decorationInfo, prefix, suffix);
+                        }
+                        else
+                        {
+                            // 装飾文字内にない場合は装飾タグを挿入
+                            string insertText = prefix + suffix;
+                            await InsertAtCursor(editor, insertText, prefix.Length);
+                            
+                            // 装飾文字の間にカーソルを配置
+                            Debug.WriteLine($"装飾文字挿入完了: '{insertText}', カーソル位置: {editor.CursorPosition}");
+                        }
+                    }
                 }
 
                 // プレビューを更新
                 UpdatePreviewForEditor(editor);
+                
+                // フォーカスをエディターに戻す
+                await RestoreFocusToEditor(editor);
             }
             catch (Exception ex)
             {
@@ -1435,6 +1524,514 @@ namespace Flashnote.Services
                 string insertText = prefix + suffix;
                 await InsertAtCursor(editor, insertText, prefix.Length);
                 UpdatePreviewForEditor(editor);
+                
+                // エラー時もフォーカスを戻す
+                await RestoreFocusToEditor(editor);
+            }
+        }
+
+        /// <summary>
+        /// 装飾文字内にカーソルがあるかどうかを判定する情報
+        /// </summary>
+        private class DecorationInfo
+        {
+            public bool IsInDecoration { get; set; }
+            public int StartIndex { get; set; }
+            public int EndIndex { get; set; }
+            public string InnerText { get; set; }
+        }
+
+        /// <summary>
+        /// カーソル位置が装飾文字内にあるかどうかをチェック
+        /// </summary>
+        private DecorationInfo CheckIfCursorInDecoration(Editor editor, string prefix, string suffix)
+        {
+            try
+            {
+                var cursorPosition = editor.CursorPosition;
+                var text = editor.Text ?? "";
+                
+                Debug.WriteLine($"=== CheckIfCursorInDecoration開始 ===");
+                Debug.WriteLine($"カーソル位置: {cursorPosition}");
+                Debug.WriteLine($"プレフィックス: '{prefix}', サフィックス: '{suffix}'");
+                Debug.WriteLine($"テキスト: '{text}'");
+                
+                // カーソル位置から前方にプレフィックスを探す
+                int prefixStart = -1;
+                for (int i = cursorPosition - 1; i >= 0; i--)
+                {
+                    if (i + prefix.Length <= text.Length && text.Substring(i, prefix.Length) == prefix)
+                    {
+                        prefixStart = i;
+                        break;
+                    }
+                }
+                
+                if (prefixStart == -1)
+                {
+                    Debug.WriteLine("プレフィックスが見つかりません");
+                    return new DecorationInfo { IsInDecoration = false };
+                }
+                
+                Debug.WriteLine($"プレフィックス開始位置: {prefixStart}");
+                
+                // プレフィックス開始位置から後方にサフィックスを探す
+                int suffixStart = -1;
+                for (int i = prefixStart + prefix.Length; i <= text.Length - suffix.Length; i++)
+                {
+                    if (text.Substring(i, suffix.Length) == suffix)
+                    {
+                        suffixStart = i;
+                        break;
+                    }
+                }
+                
+                if (suffixStart == -1)
+                {
+                    Debug.WriteLine("サフィックスが見つかりません");
+                    return new DecorationInfo { IsInDecoration = false };
+                }
+                
+                Debug.WriteLine($"サフィックス開始位置: {suffixStart}");
+                
+                // カーソルがプレフィックスとサフィックスの間にあるかチェック
+                bool isInDecoration = cursorPosition >= prefixStart + prefix.Length && cursorPosition <= suffixStart;
+                
+                if (isInDecoration)
+                {
+                    var innerText = text.Substring(prefixStart + prefix.Length, suffixStart - (prefixStart + prefix.Length));
+                    Debug.WriteLine($"装飾文字内にカーソルがあります: '{innerText}'");
+                    return new DecorationInfo
+                    {
+                        IsInDecoration = true,
+                        StartIndex = prefixStart,
+                        EndIndex = suffixStart + suffix.Length,
+                        InnerText = innerText
+                    };
+                }
+                else
+                {
+                    Debug.WriteLine("カーソルは装飾文字内にありません");
+                    return new DecorationInfo { IsInDecoration = false };
+                }
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"装飾文字チェックエラー: {ex.Message}");
+                return new DecorationInfo { IsInDecoration = false };
+            }
+        }
+
+        /// <summary>
+        /// 装飾を解除する
+        /// </summary>
+        private async Task RemoveDecoration(Editor editor, DecorationInfo decorationInfo, string prefix, string suffix)
+        {
+            try
+            {
+                Debug.WriteLine($"=== RemoveDecoration開始 ===");
+                Debug.WriteLine($"装飾解除: '{decorationInfo.InnerText}'");
+                Debug.WriteLine($"開始位置: {decorationInfo.StartIndex}, 終了位置: {decorationInfo.EndIndex}");
+                
+                var text = editor.Text ?? "";
+                var newText = text.Remove(decorationInfo.StartIndex, decorationInfo.EndIndex - decorationInfo.StartIndex)
+                                 .Insert(decorationInfo.StartIndex, decorationInfo.InnerText);
+                
+                editor.Text = newText;
+                
+                // カーソル位置を装飾解除後のテキスト内に配置
+                var newCursorPosition = decorationInfo.StartIndex + decorationInfo.InnerText.Length;
+                editor.CursorPosition = Math.Min(newCursorPosition, editor.Text.Length);
+                
+                Debug.WriteLine($"装飾解除完了: '{decorationInfo.InnerText}', 新しいカーソル位置: {editor.CursorPosition}");
+                Debug.WriteLine($"=== RemoveDecoration終了 ===");
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"装飾解除エラー: {ex.Message}");
+            }
+        }
+
+        /// <summary>
+        /// 穴埋め内にカーソルがあるかどうかを判定する情報
+        /// </summary>
+        private class BlankInfo
+        {
+            public bool IsInBlank { get; set; }
+            public int StartIndex { get; set; }
+            public int EndIndex { get; set; }
+            public string InnerText { get; set; }
+        }
+
+        /// <summary>
+        /// カーソル位置が穴埋め内にあるかどうかをチェック
+        /// </summary>
+        private BlankInfo CheckIfCursorInBlank(Editor editor)
+        {
+            try
+            {
+                var cursorPosition = editor.CursorPosition;
+                var text = editor.Text ?? "";
+                
+                Debug.WriteLine($"=== CheckIfCursorInBlank開始 ===");
+                Debug.WriteLine($"カーソル位置: {cursorPosition}");
+                Debug.WriteLine($"テキスト: '{text}'");
+                
+                // カーソル位置から前方に "<<blank|" を探す
+                int blankStart = -1;
+                for (int i = cursorPosition - 1; i >= 0; i--)
+                {
+                    if (i + 8 <= text.Length && text.Substring(i, 8) == "<<blank|")
+                    {
+                        blankStart = i;
+                        break;
+                    }
+                }
+                
+                if (blankStart == -1)
+                {
+                    Debug.WriteLine("<<blank|が見つかりません");
+                    return new BlankInfo { IsInBlank = false };
+                }
+                
+                Debug.WriteLine($"<<blank|開始位置: {blankStart}");
+                
+                // "<<blank|" 開始位置から後方に ">>" を探す
+                int blankEnd = -1;
+                for (int i = blankStart + 8; i <= text.Length - 2; i++)
+                {
+                    if (text.Substring(i, 2) == ">>")
+                    {
+                        blankEnd = i;
+                        break;
+                    }
+                }
+                
+                if (blankEnd == -1)
+                {
+                    Debug.WriteLine(">>が見つかりません");
+                    return new BlankInfo { IsInBlank = false };
+                }
+                
+                Debug.WriteLine($">>開始位置: {blankEnd}");
+                
+                // カーソルが "<<blank|" と ">>" の間にあるかチェック
+                bool isInBlank = cursorPosition >= blankStart + 8 && cursorPosition <= blankEnd;
+                
+                if (isInBlank)
+                {
+                    var innerText = text.Substring(blankStart + 8, blankEnd - (blankStart + 8));
+                    Debug.WriteLine($"穴埋め内にカーソルがあります: '{innerText}'");
+                    return new BlankInfo
+                    {
+                        IsInBlank = true,
+                        StartIndex = blankStart,
+                        EndIndex = blankEnd + 2,
+                        InnerText = innerText
+                    };
+                }
+                else
+                {
+                    Debug.WriteLine("カーソルは穴埋め内にありません");
+                    return new BlankInfo { IsInBlank = false };
+                }
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"穴埋めチェックエラー: {ex.Message}");
+                return new BlankInfo { IsInBlank = false };
+            }
+        }
+
+        /// <summary>
+        /// 穴埋めを解除する
+        /// </summary>
+        private async Task RemoveBlank(Editor editor, BlankInfo blankInfo)
+        {
+            try
+            {
+                Debug.WriteLine($"=== RemoveBlank開始 ===");
+                Debug.WriteLine($"穴埋め解除: '{blankInfo.InnerText}'");
+                Debug.WriteLine($"開始位置: {blankInfo.StartIndex}, 終了位置: {blankInfo.EndIndex}");
+                
+                var text = editor.Text ?? "";
+                var newText = text.Remove(blankInfo.StartIndex, blankInfo.EndIndex - blankInfo.StartIndex)
+                                 .Insert(blankInfo.StartIndex, blankInfo.InnerText);
+                
+                editor.Text = newText;
+                
+                // カーソル位置を穴埋め解除後のテキスト内に配置
+                var newCursorPosition = blankInfo.StartIndex + blankInfo.InnerText.Length;
+                editor.CursorPosition = Math.Min(newCursorPosition, editor.Text.Length);
+                
+                Debug.WriteLine($"穴埋め解除完了: '{blankInfo.InnerText}'");
+                Debug.WriteLine($"=== RemoveBlank終了 ===");
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"穴埋め解除エラー: {ex.Message}");
+            }
+        }
+
+        /// <summary>
+        /// 色装飾かどうかを判定
+        /// </summary>
+        private bool IsColorDecoration(string prefix)
+        {
+            return prefix.StartsWith("{{") && prefix.EndsWith("|");
+        }
+
+        /// <summary>
+        /// 色装飾内にカーソルがあるかどうかを判定する情報
+        /// </summary>
+        private class ColorDecorationInfo
+        {
+            public bool IsInColorDecoration { get; set; }
+            public int StartIndex { get; set; }
+            public int EndIndex { get; set; }
+            public string InnerText { get; set; }
+            public string CurrentColor { get; set; }
+        }
+
+        /// <summary>
+        /// カーソル位置が色装飾内にあるかどうかをチェック
+        /// </summary>
+        private ColorDecorationInfo CheckIfCursorInColorDecoration(Editor editor)
+        {
+            try
+            {
+                var cursorPosition = editor.CursorPosition;
+                var text = editor.Text ?? "";
+                
+                Debug.WriteLine($"=== CheckIfCursorInColorDecoration開始 ===");
+                Debug.WriteLine($"カーソル位置: {cursorPosition}");
+                Debug.WriteLine($"テキスト: '{text}'");
+                
+                // カーソル位置から前方に "{{" を探す
+                int colorStart = -1;
+                for (int i = cursorPosition - 1; i >= 0; i--)
+                {
+                    if (i + 2 <= text.Length && text.Substring(i, 2) == "{{")
+                    {
+                        colorStart = i;
+                        break;
+                    }
+                }
+                
+                if (colorStart == -1)
+                {
+                    Debug.WriteLine("{{が見つかりません");
+                    return new ColorDecorationInfo { IsInColorDecoration = false };
+                }
+                
+                Debug.WriteLine($"{{開始位置: {colorStart}");
+                
+                // "{{" 開始位置から後方に "}}" を探す
+                int colorEnd = -1;
+                for (int i = colorStart + 2; i <= text.Length - 2; i++)
+                {
+                    if (text.Substring(i, 2) == "}}")
+                    {
+                        colorEnd = i;
+                        break;
+                    }
+                }
+                
+                if (colorEnd == -1)
+                {
+                    Debug.WriteLine("}}が見つかりません");
+                    return new ColorDecorationInfo { IsInColorDecoration = false };
+                }
+                
+                Debug.WriteLine($"}}開始位置: {colorEnd}");
+                
+                // "{{" と "}}" の間のテキストを取得
+                var colorText = text.Substring(colorStart + 2, colorEnd - (colorStart + 2));
+                
+                // 色名とテキストを分離（例: "red|text" → "red" と "text"）
+                var pipeIndex = colorText.IndexOf('|');
+                if (pipeIndex == -1)
+                {
+                    Debug.WriteLine("|が見つかりません");
+                    return new ColorDecorationInfo { IsInColorDecoration = false };
+                }
+                
+                var currentColor = colorText.Substring(0, pipeIndex);
+                var innerText = colorText.Substring(pipeIndex + 1);
+                
+                Debug.WriteLine($"現在の色: '{currentColor}', 内側テキスト: '{innerText}'");
+                
+                // カーソルが色装飾内にあるかチェック
+                bool isInColorDecoration = cursorPosition >= colorStart + 2 + pipeIndex + 1 && cursorPosition <= colorEnd;
+                
+                if (isInColorDecoration)
+                {
+                    Debug.WriteLine($"色装飾内にカーソルがあります: '{innerText}'");
+                    return new ColorDecorationInfo
+                    {
+                        IsInColorDecoration = true,
+                        StartIndex = colorStart,
+                        EndIndex = colorEnd + 2,
+                        InnerText = innerText,
+                        CurrentColor = currentColor
+                    };
+                }
+                else
+                {
+                    Debug.WriteLine("カーソルは色装飾内にありません");
+                    return new ColorDecorationInfo { IsInColorDecoration = false };
+                }
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"色装飾チェックエラー: {ex.Message}");
+                return new ColorDecorationInfo { IsInColorDecoration = false };
+            }
+        }
+
+        /// <summary>
+        /// 色装飾の色を変更する
+        /// </summary>
+        private async Task ChangeColorDecoration(Editor editor, ColorDecorationInfo colorInfo, string newPrefix)
+        {
+            try
+            {
+                Debug.WriteLine($"=== ChangeColorDecoration開始 ===");
+                Debug.WriteLine($"現在の色: '{colorInfo.CurrentColor}'");
+                Debug.WriteLine($"新しい色: '{GetColorFromPrefix(newPrefix)}'");
+                Debug.WriteLine($"テキスト: '{colorInfo.InnerText}'");
+                Debug.WriteLine($"開始位置: {colorInfo.StartIndex}, 終了位置: {colorInfo.EndIndex}");
+                
+                var newColor = GetColorFromPrefix(newPrefix);
+                
+                // 同じ色の場合は装飾を解除
+                if (colorInfo.CurrentColor.Equals(newColor, StringComparison.OrdinalIgnoreCase))
+                {
+                    Debug.WriteLine("同じ色が押されたため、色装飾を解除します");
+                    await RemoveColorDecoration(editor, colorInfo);
+                    return;
+                }
+                
+                // 異なる色の場合は色を変更
+                var newColorText = $"{{{{{newColor}|{colorInfo.InnerText}}}}}";
+                
+                var text = editor.Text ?? "";
+                var newText = text.Remove(colorInfo.StartIndex, colorInfo.EndIndex - colorInfo.StartIndex)
+                                 .Insert(colorInfo.StartIndex, newColorText);
+                
+                editor.Text = newText;
+                
+                // カーソル位置を色変更後のテキスト内に配置
+                var newCursorPosition = colorInfo.StartIndex + 2 + newColor.Length + 1 + colorInfo.InnerText.Length;
+                editor.CursorPosition = Math.Min(newCursorPosition, editor.Text.Length);
+                
+                Debug.WriteLine($"色変更完了: '{colorInfo.InnerText}'");
+                Debug.WriteLine($"=== ChangeColorDecoration終了 ===");
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"色変更エラー: {ex.Message}");
+            }
+        }
+
+        /// <summary>
+        /// プレフィックスから色名を取得
+        /// </summary>
+        private string GetColorFromPrefix(string prefix)
+        {
+            // "{{red|" → "red"
+            return prefix.TrimStart('{').TrimEnd('|');
+        }
+
+        /// <summary>
+        /// 色装飾を解除する
+        /// </summary>
+        private async Task RemoveColorDecoration(Editor editor, ColorDecorationInfo colorInfo)
+        {
+            try
+            {
+                Debug.WriteLine($"=== RemoveColorDecoration開始 ===");
+                Debug.WriteLine($"解除する色装飾: '{colorInfo.CurrentColor}'");
+                Debug.WriteLine($"テキスト: '{colorInfo.InnerText}'");
+                Debug.WriteLine($"開始位置: {colorInfo.StartIndex}, 終了位置: {colorInfo.EndIndex}");
+                
+                var text = editor.Text ?? "";
+                
+                // 色装飾タグを削除して、内側のテキストのみを残す
+                var newText = text.Remove(colorInfo.StartIndex, colorInfo.EndIndex - colorInfo.StartIndex)
+                                 .Insert(colorInfo.StartIndex, colorInfo.InnerText);
+                
+                editor.Text = newText;
+                
+                // カーソル位置を解除後のテキスト内に配置
+                var newCursorPosition = colorInfo.StartIndex + colorInfo.InnerText.Length;
+                editor.CursorPosition = Math.Min(newCursorPosition, editor.Text.Length);
+                
+                Debug.WriteLine($"色装飾解除完了: '{colorInfo.InnerText}'");
+                Debug.WriteLine($"=== RemoveColorDecoration終了 ===");
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"色装飾解除エラー: {ex.Message}");
+            }
+        }
+
+        /// <summary>
+        /// エディターにフォーカスを戻す
+        /// </summary>
+        private async Task RestoreFocusToEditor(Editor editor)
+        {
+            try
+            {
+                Debug.WriteLine($"=== RestoreFocusToEditor開始 ===");
+                Debug.WriteLine($"エディター: {editor?.AutomationId ?? "null"}");
+                
+                if (editor == null)
+                {
+                    Debug.WriteLine("エディターがnullのため、フォーカス復元をスキップします");
+                    return;
+                }
+                
+                // 少し遅延させてからフォーカスを設定
+                await Task.Delay(150);
+                
+                // メインスレッドでフォーカスを設定
+                await MainThread.InvokeOnMainThreadAsync(async () =>
+                {
+                    try
+                    {
+                        // 複数回フォーカスを試行
+                        for (int i = 0; i < 3; i++)
+                        {
+                            editor.Focus();
+                            Debug.WriteLine($"フォーカス試行 {i + 1}: {editor.AutomationId}");
+                            
+                            // プラットフォーム固有のフォーカス設定
+#if WINDOWS
+                            if (editor.Handler?.PlatformView is Microsoft.UI.Xaml.Controls.TextBox textBox)
+                            {
+                                textBox.Focus(Microsoft.UI.Xaml.FocusState.Programmatic);
+                                Debug.WriteLine($"Windows TextBoxにフォーカスを設定しました (試行 {i + 1})");
+                            }
+#endif
+                            
+                            // 少し待ってから次の試行
+                            if (i < 2) await Task.Delay(100);
+                        }
+                        
+                        Debug.WriteLine($"フォーカス設定完了: {editor.AutomationId}");
+                    }
+                    catch (Exception ex)
+                    {
+                        Debug.WriteLine($"フォーカス設定エラー: {ex.Message}");
+                    }
+                });
+                
+                Debug.WriteLine($"=== RestoreFocusToEditor終了 ===");
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"フォーカス復元エラー: {ex.Message}");
             }
         }
 
@@ -2345,6 +2942,122 @@ namespace Flashnote.Services
         }
 
         /// <summary>
+        /// フィールドに何か入力されているかチェック
+        /// </summary>
+        public bool HasUnsavedChanges()
+        {
+            try
+            {
+                // 基本カードのフィールドをチェック
+                if (!string.IsNullOrWhiteSpace(_frontTextEditor?.Text) || 
+                    !string.IsNullOrWhiteSpace(_backTextEditor?.Text))
+                {
+                    Debug.WriteLine("基本カードフィールドに未保存の変更があります");
+                    return true;
+                }
+                
+                // 選択肢カードのフィールドをチェック
+                if (!string.IsNullOrWhiteSpace(_choiceQuestion?.Text) || 
+                    !string.IsNullOrWhiteSpace(_choiceQuestionExplanation?.Text))
+                {
+                    Debug.WriteLine("選択肢カードフィールドに未保存の変更があります");
+                    return true;
+                }
+                
+                // 選択肢コンテナをチェック
+                if (_choicesContainer != null)
+                {
+                    foreach (var child in _choicesContainer.Children)
+                    {
+                        if (child is HorizontalStackLayout layout)
+                        {
+                            var editor = layout.Children.OfType<Editor>().FirstOrDefault();
+                            if (editor != null && !string.IsNullOrWhiteSpace(editor.Text))
+                            {
+                                Debug.WriteLine("選択肢フィールドに未保存の変更があります");
+                                return true;
+                            }
+                        }
+                    }
+                }
+                
+                // 画像穴埋めカードをチェック
+                if (!string.IsNullOrEmpty(_selectedImagePath) || _selectionRects.Count > 0)
+                {
+                    Debug.WriteLine("画像穴埋めカードに未保存の変更があります");
+                    return true;
+                }
+                
+                Debug.WriteLine("未保存の変更はありません");
+                return false;
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"未保存変更チェックエラー: {ex.Message}");
+                return false;
+            }
+        }
+
+        /// <summary>
+        /// 破棄確認ダイアログを表示
+        /// </summary>
+        public async Task<bool> ShowDiscardConfirmationDialog()
+        {
+            try
+            {
+                if (_showAlertCallback != null)
+                {
+                    // NotePage用のコールバックを使用
+                    // NotePageでは、コールバック内でダイアログを表示し、結果を返す
+                    // この場合は、NotePageの戻るボタン処理で直接ダイアログを表示するため、
+                    // ここでは標準ダイアログを使用
+                    var result = await Application.Current.MainPage.DisplayAlert(
+                        "確認", 
+                        "入力内容が破棄されます。よろしいですか？", 
+                        "破棄", 
+                        "キャンセル");
+                    
+                    Debug.WriteLine($"破棄確認ダイアログ結果: {result}");
+                    return result;
+                }
+                else
+                {
+                    // Add.xaml.cs用の標準ダイアログ
+                    var result = await Application.Current.MainPage.DisplayAlert(
+                        "確認", 
+                        "入力内容が破棄されます。よろしいですか？", 
+                        "破棄", 
+                        "キャンセル");
+                    
+                    Debug.WriteLine($"破棄確認ダイアログ結果: {result}");
+                    return result;
+                }
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"破棄確認ダイアログエラー: {ex.Message}");
+                return false;
+            }
+        }
+
+        /// <summary>
+        /// フィールドをクリア
+        /// </summary>
+        public void ClearFields()
+        {
+            try
+            {
+                ResetCardFields();
+                _isDirty = false;
+                Debug.WriteLine("フィールドをクリアしました");
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"フィールドクリアエラー: {ex.Message}");
+            }
+        }
+
+        /// <summary>
         /// カードデータを保存
         /// </summary>
         private async Task SaveCardData(string cardData)
@@ -3054,6 +3767,9 @@ namespace Flashnote.Services
                 Debug.WriteLine($"エディタ: {editor.AutomationId}");
                 Debug.WriteLine($"TextBox: {textBox.GetType().Name}");
                 
+                // ペースト処理中フラグを追加
+                var isPasting = false;
+                
                 // キーボードイベントを監視
                 textBox.KeyDown += (sender, args) =>
                 {
@@ -3061,6 +3777,7 @@ namespace Flashnote.Services
                     Debug.WriteLine($"Key: {args.Key}");
                     Debug.WriteLine($"IsMenuKeyDown: {args.KeyStatus.IsMenuKeyDown}");
                     Debug.WriteLine($"現在の_isCtrlDown: {_isCtrlDown}");
+                    Debug.WriteLine($"ペースト処理中: {isPasting}");
                     
                     if (args.Key == VirtualKey.Control)
                     {
@@ -3068,13 +3785,19 @@ namespace Flashnote.Services
                         Debug.WriteLine($"Ctrlキー押下: _isCtrlDown={_isCtrlDown}");
                     }
                     // Ctrl+Vが押された場合のみペースト処理を実行
-                    if (args.Key == VirtualKey.V && _isCtrlDown)
+                    if (args.Key == VirtualKey.V && _isCtrlDown && !isPasting)
                     {
                         Debug.WriteLine($"=== Ctrl+V検出 ===");
                         Debug.WriteLine($"エディタ: {editor.AutomationId}");
                         Debug.WriteLine($"ペースト処理を開始します");
                         args.Handled = true; // デフォルトのペーストをキャンセル
-                        _ = HandleRichTextPasteAsync(editor);
+                        isPasting = true; // ペースト処理中フラグを設定
+                        _ = HandleRichTextPasteAsync(editor).ContinueWith(t => 
+                        {
+                            // ペースト処理完了後にフラグをリセット
+                            isPasting = false;
+                            Debug.WriteLine("ペースト処理完了: フラグをリセット");
+                        });
                     }
                 };
                 
@@ -3182,10 +3905,13 @@ namespace Flashnote.Services
                     }
                     
                     Debug.WriteLine($"統合ペースト処理完了: {markdownText}");
+                    return; // リッチテキスト処理が成功した場合はここで終了
                 }
                 else
                 {
                     Debug.WriteLine("リッチテキストが取得できませんでした");
+                    // リッチテキストが取得できない場合はフォールバック処理を実行
+                    await FallbackToPlainTextPaste(editor);
                 }
                 
                 Debug.WriteLine($"=== HandleRichTextPasteAsync終了 ===");
@@ -3196,45 +3922,64 @@ namespace Flashnote.Services
                 Debug.WriteLine($"スタックトレース: {ex.StackTrace}");
                 
                 // エラー時は通常のペーストにフォールバック
-                try
+                await FallbackToPlainTextPaste(editor);
+            }
+        }
+
+        /// <summary>
+        /// プレーンテキストペーストのフォールバック処理
+        /// </summary>
+        private async Task FallbackToPlainTextPaste(Editor editor)
+        {
+            try
+            {
+                Debug.WriteLine($"=== FallbackToPlainTextPaste開始 ===");
+                
+                if (Clipboard.HasText)
                 {
-                    if (Clipboard.HasText)
+                    var plainText = await Clipboard.GetTextAsync();
+                    
+                    Debug.WriteLine($"フォールバック: プレーンテキスト '{plainText}'");
+                    
+                    // フォールバック時もカーソル位置に挿入
+                    var currentText = editor.Text ?? "";
+                    var cursorPosition = editor.CursorPosition;
+                    
+                    if (cursorPosition >= 0 && cursorPosition <= currentText.Length)
                     {
-                        var plainText = await Clipboard.GetTextAsync();
-                        
-                        Debug.WriteLine($"フォールバック: プレーンテキスト '{plainText}'");
-                        
-                        // フォールバック時もカーソル位置に挿入
-                        var currentText = editor.Text ?? "";
-                        var cursorPosition = editor.CursorPosition;
-                        
-                        if (cursorPosition >= 0 && cursorPosition <= currentText.Length)
-                        {
-                            string newText = currentText.Insert(cursorPosition, plainText);
-                            editor.Text = newText;
-                            editor.CursorPosition = cursorPosition + plainText.Length;
-                        }
-                        else
-                        {
-                            // カーソル位置が不正な場合は末尾に追加
-                            editor.Text = currentText + plainText;
-                            editor.CursorPosition = editor.Text.Length;
-                        }
-                        
-                        UpdatePreviewForEditor(editor);
-                        
-                        // 選択肢問題エディターの場合、通常のペーストでも自動分離を試行
-                        if (editor == _choiceQuestion)
-                        {
-                            await Task.Delay(100);
-                            TryAutoSeparateQuestionAndChoices();
-                        }
+                        string newText = currentText.Insert(cursorPosition, plainText);
+                        editor.Text = newText;
+                        editor.CursorPosition = cursorPosition + plainText.Length;
                     }
+                    else
+                    {
+                        // カーソル位置が不正な場合は末尾に追加
+                        editor.Text = currentText + plainText;
+                        editor.CursorPosition = editor.Text.Length;
+                    }
+                    
+                    UpdatePreviewForEditor(editor);
+                    
+                    // 選択肢問題エディターの場合、通常のペーストでも自動分離を試行
+                    if (editor == _choiceQuestion)
+                    {
+                        await Task.Delay(100);
+                        TryAutoSeparateQuestionAndChoices();
+                    }
+                    
+                    Debug.WriteLine("フォールバックペースト処理完了");
                 }
-                catch (Exception fallbackEx)
+                else
                 {
-                    Debug.WriteLine($"フォールバックペースト処理エラー: {fallbackEx.Message}");
+                    Debug.WriteLine("クリップボードにテキストがありません");
                 }
+                
+                Debug.WriteLine($"=== FallbackToPlainTextPaste終了 ===");
+            }
+            catch (Exception fallbackEx)
+            {
+                Debug.WriteLine($"フォールバックペースト処理エラー: {fallbackEx.Message}");
+                Debug.WriteLine($"スタックトレース: {fallbackEx.StackTrace}");
             }
         }
 

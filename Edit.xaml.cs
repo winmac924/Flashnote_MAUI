@@ -65,6 +65,9 @@ namespace Flashnote
                 // カードタイプの初期設定
                 CardTypePicker.SelectedIndex = 0;
 
+                // 削除ボタンを初期状態で非表示にする
+                UpdateDeleteButtonVisibility(false);
+
                 Debug.WriteLine(tempExtractPath);
             }
             catch (Exception ex)
@@ -95,6 +98,14 @@ namespace Flashnote
                             if (parts.Length >= 2)
                             {
                                 var cardId = parts[0];
+                                
+                                // 削除フラグが付いているカードは読み込まない
+                                if (parts.Length >= 3 && parts[2].Trim() == "deleted")
+                                {
+                                    Debug.WriteLine($"削除フラグ付きカードをスキップ: {cardId}");
+                                    continue;
+                                }
+                                
                                 var lastModified = DateTime.ParseExact(parts[1].Trim(), "yyyy-MM-dd HH:mm:ss", null);
                                 var jsonPath = Path.Combine(cardsDirPath, $"{cardId}.json");
 
@@ -395,6 +406,9 @@ namespace Flashnote
                 // 新しいカードを読み込む
                 editCardId = selectedCard.Id;
                 LoadCardData(selectedCard.Id);
+                
+                // 削除ボタンを表示する
+                UpdateDeleteButtonVisibility(true);
                 
                 // プレビューを強制更新
                 await Task.Delay(200); // WebView初期化を待つ
@@ -1055,6 +1069,170 @@ namespace Flashnote
             {
                 SearchResultLabel.Text = $"{filteredCards.Count}/{cards.Count}件";
             }
+        }
+
+        /// <summary>
+        /// カード削除ボタンがクリックされた時の処理
+        /// </summary>
+        private async void OnDeleteCardClicked(object sender, EventArgs e)
+        {
+            if (string.IsNullOrEmpty(editCardId))
+            {
+                await DisplayAlert("エラー", "削除するカードが選択されていません。", "OK");
+                return;
+            }
+
+            // 削除確認ダイアログを表示
+            bool result = await DisplayAlert(
+                "確認", 
+                "このカードを削除しますか？\nこの操作は取り消せません。", 
+                "削除", 
+                "キャンセル"
+            );
+
+            if (result)
+            {
+                await DeleteCard(editCardId);
+            }
+        }
+
+        /// <summary>
+        /// カードを削除する
+        /// </summary>
+        private async Task DeleteCard(string cardId)
+        {
+            try
+            {
+                Debug.WriteLine($"カード削除開始: {cardId}");
+
+                // 1. JSONファイルを削除
+                var cardsDirPath = Path.Combine(tempExtractPath, "cards");
+                var jsonFilePath = Path.Combine(cardsDirPath, $"{cardId}.json");
+                
+                if (File.Exists(jsonFilePath))
+                {
+                    File.Delete(jsonFilePath);
+                    Debug.WriteLine($"JSONファイル削除完了: {jsonFilePath}");
+                }
+                else
+                {
+                    Debug.WriteLine($"JSONファイルが存在しません: {jsonFilePath}");
+                }
+
+                // 2. cards.txtを更新（削除フラグを追加）
+                var cardsFilePath = Path.Combine(tempExtractPath, "cards.txt");
+                if (File.Exists(cardsFilePath))
+                {
+                    var lines = File.ReadAllLines(cardsFilePath).ToList();
+                    var updatedLines = new List<string>();
+                    var cardCount = 0;
+
+                    // 1行目はカード数なのでそのまま追加
+                    if (lines.Count > 0)
+                    {
+                        updatedLines.Add(lines[0]);
+                    }
+
+                    // 2行目以降を処理
+                    for (int i = 1; i < lines.Count; i++)
+                    {
+                        var line = lines[i];
+                        if (!string.IsNullOrEmpty(line))
+                        {
+                            var parts = line.Split(',');
+                            if (parts.Length >= 2 && parts[0] == cardId)
+                            {
+                                // 削除対象のカードに削除フラグを追加
+                                var updatedLine = $"{parts[0]},{parts[1]},deleted";
+                                updatedLines.Add(updatedLine);
+                                Debug.WriteLine($"削除フラグを追加: {updatedLine}");
+                            }
+                            else
+                            {
+                                // 他のカードはそのまま追加
+                                updatedLines.Add(line);
+                                cardCount++;
+                            }
+                        }
+                    }
+
+                    // カード数を更新（削除されたカードを除く）
+                    if (updatedLines.Count > 0)
+                    {
+                        updatedLines[0] = cardCount.ToString();
+                    }
+
+                    // 更新された内容を保存
+                    File.WriteAllLines(cardsFilePath, updatedLines);
+                    Debug.WriteLine($"cards.txt更新完了: カード数={cardCount}");
+                }
+
+                // 3. カードリストから削除
+                var cardToRemove = cards.FirstOrDefault(c => c.Id == cardId);
+                if (cardToRemove != null)
+                {
+                    cards.Remove(cardToRemove);
+                    filteredCards.Remove(cardToRemove);
+                    CardsCollectionView.ItemsSource = null;
+                    CardsCollectionView.ItemsSource = filteredCards;
+                    TotalCardsLabel.Text = $"カード枚数: {cards.Count}";
+                    UpdateSearchResult();
+                }
+
+                // 4. 編集画面をクリア
+                ClearEditForm();
+                editCardId = null;
+
+                await DisplayAlert("完了", "カードを削除しました。", "OK");
+                Debug.WriteLine("カード削除完了");
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"カード削除エラー: {ex.Message}");
+                Debug.WriteLine($"スタックトレース: {ex.StackTrace}");
+                await DisplayAlert("エラー", $"カードの削除に失敗しました: {ex.Message}", "OK");
+            }
+        }
+
+        /// <summary>
+        /// 編集フォームをクリアする
+        /// </summary>
+        private void ClearEditForm()
+        {
+            // 基本・穴埋めカード
+            FrontTextEditor.Text = "";
+            BackTextEditor.Text = "";
+            FrontPreviewLabel.RichText = "";
+            BackPreviewLabel.RichText = "";
+
+            // 選択肢カード
+            ChoiceQuestion.Text = "";
+            ChoiceQuestionExplanation.Text = "";
+            ChoicePreviewLabel.RichText = "";
+            ChoiceExplanationPreviewLabel.RichText = "";
+            ChoicesContainer.Children.Clear();
+
+            // 画像穴埋めカード
+            selectionRects.Clear();
+            imageBitmap?.Dispose();
+            imageBitmap = null;
+            CanvasView.InvalidateSurface();
+
+            // カードタイプをリセット
+            CardTypePicker.SelectedIndex = 0;
+
+            // 削除ボタンを非表示にする
+            UpdateDeleteButtonVisibility(false);
+        }
+
+        /// <summary>
+        /// 削除ボタンの表示/非表示を更新する
+        /// </summary>
+        private void UpdateDeleteButtonVisibility(bool isVisible)
+        {
+            BasicCardDeleteButton.IsVisible = isVisible;
+            MultipleChoiceDeleteButton.IsVisible = isVisible;
+            ImageFillDeleteButton.IsVisible = isVisible;
         }
     }
 } 

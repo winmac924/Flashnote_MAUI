@@ -72,6 +72,14 @@ namespace Flashnote
                 DisplayAlert("エラー", "データが見つかりませんでした", "OK");
             }
         }
+
+        // ページが表示されるたびに呼ばれるメソッド
+        protected override void OnAppearing()
+        {
+            base.OnAppearing();
+            // カード枚数を再取得して更新
+            LoadNote();
+        }
         // ノート数取得  
         private int GetTotalQuestions()
         {

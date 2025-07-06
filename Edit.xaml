@@ -225,6 +225,15 @@
                         <local:RichTextLabel x:Name="BackPreviewLabel"
                                          VerticalOptions="Start"
                                          HorizontalOptions="Fill"/>
+                        
+                        <!-- 削除ボタン -->
+                        <Button Text="このカードを削除"
+                            Clicked="OnDeleteCardClicked"
+                            BackgroundColor="Red"
+                            TextColor="White"
+                            HorizontalOptions="Fill"
+                            Margin="0,20,0,0"
+                            x:Name="BasicCardDeleteButton"/>
                     </VerticalStackLayout>
 
                     <!-- 選択肢カード -->
@@ -289,6 +298,15 @@
                         <Button Text="選択肢を追加"
                             Clicked="OnAddChoice"
                             HorizontalOptions="Start"/>
+                        
+                        <!-- 削除ボタン -->
+                        <Button Text="このカードを削除"
+                            Clicked="OnDeleteCardClicked"
+                            BackgroundColor="Red"
+                            TextColor="White"
+                            HorizontalOptions="Fill"
+                            Margin="0,20,0,0"
+                            x:Name="MultipleChoiceDeleteButton"/>
                     </VerticalStackLayout>
 
                     <!-- 画像穴埋めカード -->
@@ -313,6 +331,15 @@
                                            EnableTouchEvents="True"
                                            Touch="OnCanvasTouch"/>
                         </Frame>
+                        
+                        <!-- 削除ボタン -->
+                        <Button Text="このカードを削除"
+                            Clicked="OnDeleteCardClicked"
+                            BackgroundColor="Red"
+                            TextColor="White"
+                            HorizontalOptions="Fill"
+                            Margin="0,20,0,0"
+                            x:Name="ImageFillDeleteButton"/>
                     </VerticalStackLayout>
                 </VerticalStackLayout>
             </ScrollView>

@@ -25,6 +25,7 @@ namespace Flashnote.Services
             public string Uuid { get; set; }
             public DateTime LastModified { get; set; }
             public string Content { get; set; }
+            public bool IsDeleted { get; set; }
         }
 
         private async Task<List<CardInfo>> ParseCardsFile(string content)
@@ -56,10 +57,11 @@ namespace Flashnote.Services
                             var card = new CardInfo
                             {
                                 Uuid = parts[0],
-                                LastModified = DateTime.ParseExact(parts[1].Trim(), "yyyy-MM-dd HH:mm:ss", null)
+                                LastModified = DateTime.ParseExact(parts[1].Trim(), "yyyy-MM-dd HH:mm:ss", null),
+                                IsDeleted = parts.Length >= 3 && parts[2].Trim() == "deleted"
                             };
                             cards.Add(card);
-                            Debug.WriteLine($"カード情報をパース: UUID={card.Uuid}, 最終更新={card.LastModified}");
+                            Debug.WriteLine($"カード情報をパース: UUID={card.Uuid}, 最終更新={card.LastModified}, 削除フラグ={card.IsDeleted}");
                         }
                         else
                         {

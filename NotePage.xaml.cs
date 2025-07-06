@@ -651,6 +651,74 @@ namespace Flashnote
         }
 
         /// <summary>
+        /// 戻るボタンが押された時の処理
+        /// </summary>
+        protected override bool OnBackButtonPressed()
+        {
+            try
+            {
+                Debug.WriteLine("NotePageの戻るボタンが押されました");
+                
+                // カード追加パネルが表示されている場合
+                if (_isAddCardVisible)
+                {
+                    Debug.WriteLine("カード追加パネルが表示されています");
+                    
+                    // 未保存の変更があるかチェック
+                    if (_cardManager != null && _cardManager.HasUnsavedChanges())
+                    {
+                        Debug.WriteLine("カード追加パネルに未保存の変更があります。破棄確認ダイアログを表示します");
+                        
+                        // UIスレッドでダイアログを表示
+                        MainThread.BeginInvokeOnMainThread(async () =>
+                        {
+                            try
+                            {
+                                var shouldDiscard = await _cardManager.ShowDiscardConfirmationDialog();
+                                
+                                if (shouldDiscard)
+                                {
+                                    Debug.WriteLine("破棄が選択されました。カード追加パネルを閉じます");
+                                    _cardManager.ClearFields();
+                                    await HideAddCardPanel();
+                                }
+                                else
+                                {
+                                    Debug.WriteLine("キャンセルが選択されました。パネルを開いたままにします");
+                                }
+                            }
+                            catch (Exception ex)
+                            {
+                                Debug.WriteLine($"破棄確認ダイアログエラー: {ex.Message}");
+                            }
+                        });
+                        
+                        return true; // デフォルトの戻る動作をキャンセル
+                    }
+                    else
+                    {
+                        Debug.WriteLine("未保存の変更はありません。カード追加パネルを閉じます");
+                        MainThread.BeginInvokeOnMainThread(async () =>
+                        {
+                            await HideAddCardPanel();
+                        });
+                        return true; // デフォルトの戻る動作をキャンセル
+                    }
+                }
+                else
+                {
+                    Debug.WriteLine("カード追加パネルは表示されていません。通常通り戻ります");
+                    return base.OnBackButtonPressed();
+                }
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"戻るボタン処理エラー: {ex.Message}");
+                return base.OnBackButtonPressed();
+            }
+        }
+
+        /// <summary>
         /// IDisposableの実装
         /// </summary>
         public void Dispose()

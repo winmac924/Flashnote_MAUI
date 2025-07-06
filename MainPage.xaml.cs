@@ -39,6 +39,10 @@ namespace Flashnote
         private bool _isSyncing = false;
         private MainPageViewModel _viewModel;
         private bool _isImportDropdownAnimating = false;
+        private bool _isCtrlDown = false; // Ctrlキー押下状態を管理
+        private bool _isShiftDown = false; // Shiftキー押下状態を管理
+        private bool _keyboardEventsSetup = false; // キーボードイベント設定済みフラグ
+        private bool _isProcessingKeyboardEvent = false; // キーボードイベント処理中フラグ
 
         public MainPage(CardSyncService cardSyncService, UpdateNotificationService updateService, BlobStorageService blobStorageService, SharedKeyService sharedKeyService, FileWatcherService fileWatcherService)
         {
@@ -75,7 +79,300 @@ namespace Flashnote
         protected override void OnAppearing()
         {
             base.OnAppearing();
+            
+            // キーボードイベントを遅延実行で設定
+            MainThread.BeginInvokeOnMainThread(async () =>
+            {
+                await Task.Delay(500); // 500ms待機してから設定
+                SetupKeyboardEvents();
+            });
         }
+
+        private void SetupKeyboardEvents()
+        {
+#if WINDOWS
+            try
+            {
+                System.Diagnostics.Debug.WriteLine("[DEBUG] SetupKeyboardEvents開始");
+                
+                // 既に設定済みの場合はスキップ
+                if (_keyboardEventsSetup)
+                {
+                    System.Diagnostics.Debug.WriteLine("[DEBUG] キーボードイベントは既に設定済みです");
+                    return;
+                }
+                
+                // 方法1: FrameworkElementから取得
+                if (this.Handler?.PlatformView is Microsoft.UI.Xaml.FrameworkElement frameworkElement)
+                {
+                    System.Diagnostics.Debug.WriteLine("[DEBUG] FrameworkElement取得成功");
+                    
+                    // 既存のイベントハンドラを削除（重複を防ぐ）
+                    frameworkElement.KeyDown -= OnKeyDown;
+                    frameworkElement.KeyUp -= OnKeyUp;
+                    
+                    frameworkElement.KeyDown += OnKeyDown;
+                    frameworkElement.KeyUp += OnKeyUp;
+                    System.Diagnostics.Debug.WriteLine("[DEBUG] FrameworkElementにキーボードイベント設定完了");
+                }
+                else
+                {
+                    System.Diagnostics.Debug.WriteLine("[DEBUG] FrameworkElementが見つかりませんでした");
+                }
+                
+                // 方法2: CoreWindowから直接取得を試行
+                try
+                {
+                    var window = Microsoft.Maui.Controls.Application.Current.Windows[0];
+                    if (window?.Handler?.PlatformView is Microsoft.UI.Xaml.Window winUIWindow)
+                    {
+                        System.Diagnostics.Debug.WriteLine("[DEBUG] WinUI Window取得成功");
+                        var coreWindow = winUIWindow.CoreWindow;
+                        if (coreWindow != null)
+                        {
+                            // 既存のイベントハンドラを削除（重複を防ぐ）
+                            coreWindow.KeyDown -= OnCoreWindowKeyDown;
+                            coreWindow.KeyUp -= OnCoreWindowKeyUp;
+                            
+                            coreWindow.KeyDown += OnCoreWindowKeyDown;
+                            coreWindow.KeyUp += OnCoreWindowKeyUp;
+                            System.Diagnostics.Debug.WriteLine("[DEBUG] CoreWindowにキーボードイベント設定完了");
+                        }
+                        else
+                        {
+                            System.Diagnostics.Debug.WriteLine("[DEBUG] CoreWindowが見つかりませんでした");
+                        }
+                    }
+                    else
+                    {
+                        System.Diagnostics.Debug.WriteLine("[DEBUG] WinUI Windowが見つかりませんでした");
+                    }
+                }
+                catch (Exception windowEx)
+                {
+                    System.Diagnostics.Debug.WriteLine($"[DEBUG] Window取得エラー: {windowEx.Message}");
+                }
+                
+                // 方法3: 再試行（1秒後に再度試行）
+                if (this.Handler?.PlatformView == null)
+                {
+                    System.Diagnostics.Debug.WriteLine("[DEBUG] ハンドラーがまだ準備できていないため、1秒後に再試行");
+                    MainThread.BeginInvokeOnMainThread(async () =>
+                    {
+                        await Task.Delay(1000);
+                        SetupKeyboardEvents();
+                    });
+                    return;
+                }
+                
+                _keyboardEventsSetup = true;
+                System.Diagnostics.Debug.WriteLine("[DEBUG] SetupKeyboardEvents完了");
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"[DEBUG] キーボードイベント設定エラー: {ex.Message}");
+                System.Diagnostics.Debug.WriteLine($"[DEBUG] スタックトレース: {ex.StackTrace}");
+            }
+#endif
+        }
+
+#if WINDOWS
+        // FrameworkElement用のイベントハンドラ
+        private void OnKeyDown(object sender, Microsoft.UI.Xaml.Input.KeyRoutedEventArgs e)
+        {
+            System.Diagnostics.Debug.WriteLine($"[DEBUG] FrameworkElement KeyDown: {e.Key}");
+            HandleKeyDown(e);
+        }
+
+        private void OnKeyUp(object sender, Microsoft.UI.Xaml.Input.KeyRoutedEventArgs e)
+        {
+            System.Diagnostics.Debug.WriteLine($"[DEBUG] FrameworkElement KeyUp: {e.Key}");
+            HandleKeyUp(e);
+        }
+        
+        // CoreWindow用のイベントハンドラ
+        private void OnCoreWindowKeyDown(Windows.UI.Core.CoreWindow sender, Windows.UI.Core.KeyEventArgs e)
+        {
+            System.Diagnostics.Debug.WriteLine($"[DEBUG] CoreWindow KeyDown: {e.VirtualKey}");
+            HandleCoreWindowKeyDown(e);
+        }
+
+        private void OnCoreWindowKeyUp(Windows.UI.Core.CoreWindow sender, Windows.UI.Core.KeyEventArgs e)
+        {
+            System.Diagnostics.Debug.WriteLine($"[DEBUG] CoreWindow KeyUp: {e.VirtualKey}");
+            HandleCoreWindowKeyUp(e);
+        }
+        
+        // CoreWindow用の共通キー処理
+        private void HandleCoreWindowKeyDown(Windows.UI.Core.KeyEventArgs e)
+        {
+            System.Diagnostics.Debug.WriteLine($"[DEBUG] HandleCoreWindowKeyDown: {e.VirtualKey}, Ctrl: {_isCtrlDown}, Shift: {_isShiftDown}, Processing: {_isProcessingKeyboardEvent}");
+            
+            if (_isProcessingKeyboardEvent)
+            {
+                System.Diagnostics.Debug.WriteLine("[DEBUG] キーボードイベント処理中、スキップ");
+                return;
+            }
+            
+            if (e.VirtualKey == Windows.System.VirtualKey.Control)
+            {
+                _isCtrlDown = true;
+                System.Diagnostics.Debug.WriteLine("[DEBUG] Ctrlキー押下");
+            }
+            
+            if (e.VirtualKey == Windows.System.VirtualKey.Shift)
+            {
+                _isShiftDown = true;
+                System.Diagnostics.Debug.WriteLine("[DEBUG] Shiftキー押下");
+            }
+            
+            // Ctrl+Nが押された場合（Shiftなし）
+            if (e.VirtualKey == Windows.System.VirtualKey.N && _isCtrlDown && !_isShiftDown)
+            {
+                System.Diagnostics.Debug.WriteLine("[DEBUG] Ctrl+N が検出されました");
+                e.Handled = true; // デフォルトの処理をキャンセル
+                
+                _isProcessingKeyboardEvent = true;
+                MainThread.BeginInvokeOnMainThread(() => 
+                {
+                    try
+                    {
+                        System.Diagnostics.Debug.WriteLine("[DEBUG] ノート作成ダイアログを表示");
+                        OnCreateNoteClicked(null, null);
+                    }
+                    finally
+                    {
+                        _isProcessingKeyboardEvent = false;
+                        System.Diagnostics.Debug.WriteLine("[DEBUG] キーボードイベント処理完了");
+                    }
+                });
+            }
+            
+            // Ctrl+Shift+Nが押された場合
+            if (e.VirtualKey == Windows.System.VirtualKey.N && _isCtrlDown && _isShiftDown)
+            {
+                System.Diagnostics.Debug.WriteLine("[DEBUG] Ctrl+Shift+N が検出されました");
+                e.Handled = true; // デフォルトの処理をキャンセル
+                
+                _isProcessingKeyboardEvent = true;
+                MainThread.BeginInvokeOnMainThread(() => 
+                {
+                    try
+                    {
+                        System.Diagnostics.Debug.WriteLine("[DEBUG] フォルダ作成ダイアログを表示");
+                        OnCreateFolderClicked(null, null);
+                    }
+                    finally
+                    {
+                        _isProcessingKeyboardEvent = false;
+                        System.Diagnostics.Debug.WriteLine("[DEBUG] キーボードイベント処理完了");
+                    }
+                });
+            }
+        }
+
+        private void HandleCoreWindowKeyUp(Windows.UI.Core.KeyEventArgs e)
+        {
+            System.Diagnostics.Debug.WriteLine($"[DEBUG] HandleCoreWindowKeyUp: {e.VirtualKey}");
+            
+            if (e.VirtualKey == Windows.System.VirtualKey.Control)
+            {
+                _isCtrlDown = false;
+                System.Diagnostics.Debug.WriteLine("[DEBUG] Ctrlキー離上");
+            }
+            
+            if (e.VirtualKey == Windows.System.VirtualKey.Shift)
+            {
+                _isShiftDown = false;
+                System.Diagnostics.Debug.WriteLine("[DEBUG] Shiftキー離上");
+            }
+        }
+        
+        // FrameworkElement用の共通キー処理
+        private void HandleKeyDown(Microsoft.UI.Xaml.Input.KeyRoutedEventArgs e)
+        {
+            System.Diagnostics.Debug.WriteLine($"[DEBUG] HandleKeyDown: {e.Key}, Ctrl: {_isCtrlDown}, Shift: {_isShiftDown}, Processing: {_isProcessingKeyboardEvent}");
+            
+            if (_isProcessingKeyboardEvent)
+            {
+                System.Diagnostics.Debug.WriteLine("[DEBUG] キーボードイベント処理中、スキップ");
+                return;
+            }
+            
+            if (e.Key == Windows.System.VirtualKey.Control)
+            {
+                _isCtrlDown = true;
+                System.Diagnostics.Debug.WriteLine("[DEBUG] Ctrlキー押下");
+            }
+            
+            if (e.Key == Windows.System.VirtualKey.Shift)
+            {
+                _isShiftDown = true;
+                System.Diagnostics.Debug.WriteLine("[DEBUG] Shiftキー押下");
+            }
+            
+            // Ctrl+Nが押された場合（Shiftなし）
+            if (e.Key == Windows.System.VirtualKey.N && _isCtrlDown && !_isShiftDown)
+            {
+                System.Diagnostics.Debug.WriteLine("[DEBUG] Ctrl+N が検出されました");
+                e.Handled = true; // デフォルトの処理をキャンセル
+                
+                _isProcessingKeyboardEvent = true;
+                MainThread.BeginInvokeOnMainThread(() => 
+                {
+                    try
+                    {
+                        System.Diagnostics.Debug.WriteLine("[DEBUG] ノート作成ダイアログを表示");
+                        OnCreateNoteClicked(null, null);
+                    }
+                    finally
+                    {
+                        _isProcessingKeyboardEvent = false;
+                        System.Diagnostics.Debug.WriteLine("[DEBUG] キーボードイベント処理完了");
+                    }
+                });
+            }
+            
+            // Ctrl+Shift+Nが押された場合
+            if (e.Key == Windows.System.VirtualKey.N && _isCtrlDown && _isShiftDown)
+            {
+                System.Diagnostics.Debug.WriteLine("[DEBUG] Ctrl+Shift+N が検出されました");
+                e.Handled = true; // デフォルトの処理をキャンセル
+                
+                _isProcessingKeyboardEvent = true;
+                MainThread.BeginInvokeOnMainThread(() => 
+                {
+                    try
+                    {
+                        System.Diagnostics.Debug.WriteLine("[DEBUG] フォルダ作成ダイアログを表示");
+                        OnCreateFolderClicked(null, null);
+                    }
+                    finally
+                    {
+                        _isProcessingKeyboardEvent = false;
+                        System.Diagnostics.Debug.WriteLine("[DEBUG] キーボードイベント処理完了");
+                    }
+                });
+            }
+        }
+
+        private void HandleKeyUp(Microsoft.UI.Xaml.Input.KeyRoutedEventArgs e)
+        {
+            System.Diagnostics.Debug.WriteLine($"[DEBUG] HandleKeyUp: {e.Key}");
+            
+            if (e.Key == Windows.System.VirtualKey.Control)
+            {
+                _isCtrlDown = false;
+                System.Diagnostics.Debug.WriteLine("[DEBUG] Ctrlキー離上");
+            }
+            
+            if (e.Key == Windows.System.VirtualKey.Shift)
+            {
+                _isShiftDown = false;
+                System.Diagnostics.Debug.WriteLine("[DEBUG] Shiftキー離上");
+            }
+        }
+#endif
 
         private void SetupFileWatcher()
         {
@@ -305,23 +602,63 @@ namespace Flashnote
         // 新規ノート作成ボタンのクリックイベント
         private async Task OnCreateNewNoteClicked(object sender, EventArgs e)
         {
-            string action = await DisplayActionSheet("新規作成", "キャンセル", null, "ノート", "フォルダ");
+            // ポップアップメニューを表示
+            if (!CreatePopupFrame.IsVisible)
+            {
+                CreatePopupFrame.Opacity = 0;
+                CreatePopupFrame.Scale = 0.8;
+                CreatePopupFrame.IsVisible = true;
 
-            if (action == "ノート")
-            {
-                string newNoteName = await DisplayPromptAsync("新規ノート作成", "ノートの名前を入力してください");
-                if (!string.IsNullOrWhiteSpace(newNoteName))
+                // アニメーション
+                await Task.WhenAll(
+                    CreatePopupFrame.FadeTo(1, 200),
+                    CreatePopupFrame.ScaleTo(1, 200)
+                );
+
+                // 3秒後に自動で非表示
+                _ = Task.Delay(3000).ContinueWith(_ =>
                 {
-                    SaveNewNote(newNoteName);
-                }
+                    MainThread.BeginInvokeOnMainThread(async () =>
+                    {
+                        if (CreatePopupFrame.IsVisible)
+                        {
+                            await CreatePopupFrame.FadeTo(0, 150);
+                            CreatePopupFrame.IsVisible = false;
+                        }
+                    });
+                });
             }
-            else if (action == "フォルダ")
+            else
             {
-                string newFolderName = await DisplayPromptAsync("新規フォルダ作成", "フォルダの名前を入力してください");
-                if (!string.IsNullOrWhiteSpace(newFolderName))
-                {
-                    CreateNewFolder(newFolderName);
-                }
+                // 非表示にする場合
+                await CreatePopupFrame.FadeTo(0, 150);
+                CreatePopupFrame.IsVisible = false;
+            }
+        }
+
+        // ノート作成ボタンのクリックイベント
+        private async void OnCreateNoteClicked(object sender, EventArgs e)
+        {
+            // ポップアップを閉じる
+            CreatePopupFrame.IsVisible = false;
+            
+            string newNoteName = await DisplayPromptAsync("新規ノート作成", "ノートの名前を入力してください");
+            if (!string.IsNullOrWhiteSpace(newNoteName))
+            {
+                SaveNewNote(newNoteName);
+            }
+        }
+
+        // フォルダ作成ボタンのクリックイベント
+        private async void OnCreateFolderClicked(object sender, EventArgs e)
+        {
+            // ポップアップを閉じる
+            CreatePopupFrame.IsVisible = false;
+            
+            string newFolderName = await DisplayPromptAsync("新規フォルダ作成", "フォルダの名前を入力してください");
+            if (!string.IsNullOrWhiteSpace(newFolderName))
+            {
+                CreateNewFolder(newFolderName);
             }
         }
 
@@ -694,6 +1031,17 @@ namespace Flashnote
             }
 
             UpdateSpan(width);
+            
+            // キーボードイベントの設定を試行（まだ設定されていない場合）
+            if (!_keyboardEventsSetup)
+            {
+                _keyboardEventsSetup = true;
+                MainThread.BeginInvokeOnMainThread(async () =>
+                {
+                    await Task.Delay(200); // 少し待機してから設定
+                    SetupKeyboardEvents();
+                });
+            }
         }
 
         private void UpdateSpan(double width)
@@ -825,6 +1173,48 @@ namespace Flashnote
         protected override void OnDisappearing()
         {
             base.OnDisappearing();
+            
+#if WINDOWS
+            // キーボードイベントをクリーンアップ
+            try
+            {
+                System.Diagnostics.Debug.WriteLine("[DEBUG] キーボードイベントクリーンアップ開始");
+                
+                // FrameworkElementのクリーンアップ
+                if (this.Handler?.PlatformView is Microsoft.UI.Xaml.FrameworkElement frameworkElement)
+                {
+                    frameworkElement.KeyDown -= OnKeyDown;
+                    frameworkElement.KeyUp -= OnKeyUp;
+                    System.Diagnostics.Debug.WriteLine("[DEBUG] FrameworkElementキーボードイベントクリーンアップ完了");
+                }
+                
+                // CoreWindowのクリーンアップ
+                try
+                {
+                    var window = Microsoft.Maui.Controls.Application.Current.Windows[0];
+                    if (window?.Handler?.PlatformView is Microsoft.UI.Xaml.Window winUIWindow)
+                    {
+                        var coreWindow = winUIWindow.CoreWindow;
+                        if (coreWindow != null)
+                        {
+                            coreWindow.KeyDown -= OnCoreWindowKeyDown;
+                            coreWindow.KeyUp -= OnCoreWindowKeyUp;
+                            System.Diagnostics.Debug.WriteLine("[DEBUG] CoreWindowキーボードイベントクリーンアップ完了");
+                        }
+                    }
+                }
+                catch (Exception windowEx)
+                {
+                    System.Diagnostics.Debug.WriteLine($"[DEBUG] Windowクリーンアップエラー: {windowEx.Message}");
+                }
+                
+                System.Diagnostics.Debug.WriteLine("[DEBUG] キーボードイベントクリーンアップ完了");
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"[DEBUG] キーボードイベントクリーンアップエラー: {ex.Message}");
+            }
+#endif
             
             // ファイル監視のイベントハンドラーを解除
             if (_fileWatcherService != null)
