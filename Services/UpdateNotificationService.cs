@@ -174,7 +174,7 @@ public class UpdateNotificationService
             // 最終確認
             var confirmResult = await UIThreadHelper.ShowAlertAsync(
                 "🔄 アップデート実行",
-                "アップデートを実行します。\n\n処理内容：\n1. 新しいバージョンをダウンロード\n2. アプリケーションを終了\n3. ファイルを自動更新\n4. 新しいバージョンを起動\n\n実行しますか？",
+                "アップデートを実行します。\n\n処理内容：\n1. 新しいバージースをダウンロード\n2. アプリケーションを終了\n3. ファイルを自動更新\n4. 新しいバージョンを起動\n\n実行しますか？",
                 "実行する",
                 "キャンセル"
             );
@@ -185,9 +185,21 @@ public class UpdateNotificationService
                 return;
             }
 
-            // 進捗表示ページを作成して表示
-            var progressPage = new UpdateProgressPage();
-            await Application.Current.MainPage.Navigation.PushModalAsync(progressPage);
+            // UIスレッドで安全に進捗表示ページを作成して表示
+            UpdateProgressPage progressPage = null;
+            progressPage = new UpdateProgressPage();
+            var navigationSuccess = await UIThreadHelper.NavigateToModalAsync(progressPage);
+            
+            if (!navigationSuccess)
+            {
+                _logger.LogError("進捗ページの表示に失敗しました");
+                await UIThreadHelper.ShowAlertAsync(
+                    "❌ エラー",
+                    "アップデート画面の表示に失敗しました。手動でアップデートしてください。",
+                    "OK"
+                );
+                return;
+            }
 
             _logger.LogInformation("アップデートのダウンロードを開始: {Url}", updateInfo.DownloadUrl);
             
@@ -201,7 +213,7 @@ public class UpdateNotificationService
                     {
                         _logger.LogInformation("進捗報告: {Progress:P1} - {Status} - {Detail}", 
                             p.ProgressPercentage, p.Status, p.Detail);
-                        progressPage.UpdateProgress(p.ProgressPercentage, p.Status, p.Detail);
+                        progressPage?.UpdateProgress(p.ProgressPercentage, p.Status, p.Detail);
                     }
                     catch (Exception ex)
                     {
@@ -214,7 +226,7 @@ public class UpdateNotificationService
             catch (Exception downloadEx)
             {
                 _logger.LogError(downloadEx, "アップデートのダウンロード中に例外が発生しました");
-                progressPage.ShowError("ダウンロード中にエラーが発生しました", downloadEx.Message);
+                progressPage?.ShowError("ダウンロード中にエラーが発生しました", downloadEx.Message);
                 success = false;
             }
 
@@ -222,21 +234,21 @@ public class UpdateNotificationService
             {
                 // 成功の場合は、アプリが自動終了するので通知は不要
                 _logger.LogInformation("アップデート処理が正常に開始されました - アプリを終了します");
-                progressPage.ShowComplete(true, "アップデートが完了しました。アプリケーションを再起動します。");
+                progressPage?.ShowComplete(true, "アップデートが完了しました。アプリケーションを再起動します。");
                 
                 // 少し待ってからページを閉じる（ユーザーがメッセージを読む時間を確保）
                 await Task.Delay(2000);
             }
             else
             {
-                progressPage.ShowError(
+                progressPage?.ShowError(
                     "アップデートに失敗しました",
                     "手動でアップデートしてください：\n1. GitHubリリースページにアクセス\n2. 最新の .exe ファイルをダウンロード\n3. 現在のファイルを置き換え"
                 );
                 
                 // エラーの場合は3秒後にページを閉じる
                 await Task.Delay(3000);
-                await Application.Current.MainPage.Navigation.PopModalAsync();
+                await UIThreadHelper.PopModalAsync();
             }
         }
         catch (Exception ex)
@@ -244,25 +256,35 @@ public class UpdateNotificationService
             _logger.LogError(ex, "アップデートのダウンロード中にエラーが発生しました");
             
             // 進捗ページが表示されている場合はエラーを表示
-            if (Application.Current.MainPage.Navigation.ModalStack.LastOrDefault() is UpdateProgressPage errorPage)
+            await MainThread.InvokeOnMainThreadAsync(async () =>
             {
-                errorPage.ShowError(
-                    "アップデート中にエラーが発生しました",
-                    $"手動でアップデートしてください：\n1. https://github.com/winmac924/Flashnote_MAUI/releases\n2. 最新の .exe ファイルをダウンロード\n3. 現在のファイルを置き換え\n\nエラー詳細: {ex.Message}"
-                );
-                
-                await Task.Delay(3000);
-                await Application.Current.MainPage.Navigation.PopModalAsync();
-            }
-            else
-            {
-                // 進捗ページが表示されていない場合は従来の方法でエラーを表示
-                await UIThreadHelper.ShowAlertAsync(
-                    "❌ アップデートエラー",
-                    $"アップデート中にエラーが発生しました。\n\n手動でアップデートしてください：\n1. https://github.com/winmac924/Flashnote_MAUI/releases\n2. 最新の .exe ファイルをダウンロード\n3. 現在のファイルを置き換え\n\nエラー詳細: {ex.Message}",
-                    "OK"
-                );
-            }
+                try
+                {
+                    if (Application.Current?.MainPage?.Navigation?.ModalStack?.LastOrDefault() is UpdateProgressPage errorPage)
+                    {
+                        errorPage.ShowError(
+                            "アップデート中にエラーが発生しました",
+                            $"手動でアップデートしてください：\n1. https://github.com/winmac924/Flashnote_MAUI/releases\n2. 最新の .exe ファイルをダウンロード\n3. 現在のファイルを置き換え\n\nエラー詳細: {ex.Message}"
+                        );
+                        
+                        await Task.Delay(3000);
+                        await UIThreadHelper.PopModalAsync();
+                    }
+                    else
+                    {
+                        // 進捗ページが表示されていない場合は従来の方法でエラーを表示
+                        await UIThreadHelper.ShowAlertAsync(
+                            "❌ アップデートエラー",
+                            $"アップデート中にエラーが発生しました。\n\n手動でアップデートしてください：\n1. https://github.com/winmac924/Flashnote_MAUI/releases\n2. 最新の .exe ファイルをダウンロード\n3. 現在のファイルを置き換え\n\nエラー詳細: {ex.Message}",
+                            "OK"
+                        );
+                    }
+                }
+                catch (Exception uiEx)
+                {
+                    _logger.LogError(uiEx, "UIエラー表示中にエラーが発生しました");
+                }
+            });
         }
     }
 
