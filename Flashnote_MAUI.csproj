@@ -27,7 +27,7 @@
 		<ApplicationId>winmac924.flashnote.maui</ApplicationId>
 
 		<!-- Versions - 自動アップデート対応 -->
-		<ApplicationDisplayVersion>2.1</ApplicationDisplayVersion>
+		<ApplicationDisplayVersion>2.1.0</ApplicationDisplayVersion>
 		<ApplicationVersion>210</ApplicationVersion>
 		<VersionPrefix>2.1.0</VersionPrefix>
 		<VersionSuffix Condition="'$(Configuration)' == 'Debug'">dev</VersionSuffix>
@@ -132,6 +132,7 @@
 	</ItemGroup>
 
 </Project>
+
 
 
 
