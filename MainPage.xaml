@@ -4,6 +4,7 @@
              xmlns:behaviors="clr-namespace:Flashnote.Behaviors"
              xmlns:converters="clr-namespace:Flashnote.Converters"
              xmlns:fonts="clr-namespace:Flashnote.Resources.Fonts"
+             xmlns:views="clr-namespace:Flashnote.Views"
              x:Class="Flashnote.MainPage">
 
     <ContentPage.Resources>
@@ -108,6 +109,7 @@
                     <ColumnDefinition Width="Auto"/>
                     <ColumnDefinition Width="Auto"/>
                     <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="Auto"/>
                 </Grid.ColumnDefinitions>
                 
                 <!-- アプリタイトル -->
@@ -141,9 +143,19 @@
                         Style="{StaticResource ModernButtonStyle}"
                         Clicked="OnSyncClicked"/>
                                 
+                <!-- ヘルプボタン -->
+                <Button Text="{x:Static fonts:FluentUI.question_circle_24_regular}"
+                        Grid.Column="5"
+                        FontFamily="FluentUI"
+                        FontSize="18" 
+                        Style="{StaticResource IconButtonStyle}"
+                        WidthRequest="42"
+                        HeightRequest="42"
+                        Clicked="OnHelpClicked"/>
+                                
                 <!-- 設定ボタン -->
                 <Button Text="{x:Static fonts:FluentUI.settings_24_regular}"
-                        Grid.Column="5"
+                        Grid.Column="6"
                         FontFamily="FluentUI"
                         FontSize="20" 
                         Style="{StaticResource IconButtonStyle}"
@@ -330,6 +342,9 @@
                             Clicked="OnSharedKeyImportClicked"/>
                 </StackLayout>
             </Frame>
+            
+            <!-- ヘルプオーバーレイ -->
+            <views:HelpOverlay x:Name="HelpOverlayControl"/>
         </Grid>
     </Grid>
 </ContentPage>

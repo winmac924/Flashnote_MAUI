@@ -564,6 +564,19 @@ namespace Flashnote
             }
         }
 
+        private async void OnHelpClicked(object sender, EventArgs e)
+        {
+            try
+            {
+                await HelpOverlayControl.ShowHelp(HelpType.NotePage);
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"ヘルプ表示中にエラー: {ex.Message}");
+                await UIThreadHelper.ShowAlertAsync("エラー", "ヘルプの表示に失敗しました", "OK");
+            }
+        }
+
         private async void OnSaveClicked(object sender, EventArgs e)
         {
             try

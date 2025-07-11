@@ -289,6 +289,10 @@ namespace Flashnote
         protected override void OnStart()
         {
             base.OnStart();
+            Debug.WriteLine("アプリが開始されました");
+            
+
+            
             // アプリケーション開始時にファイル監視を開始
             _fileWatcherService?.StartWatching();
         }

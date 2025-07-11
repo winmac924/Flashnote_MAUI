@@ -6,6 +6,8 @@ using SkiaSharp;
 using SkiaSharp.Views.Maui;
 using System.Web;
 using System.Reflection;
+using Flashnote.Views;
+using Flashnote.Models;
 
 namespace Flashnote
 {
@@ -1233,6 +1235,19 @@ namespace Flashnote
             BasicCardDeleteButton.IsVisible = isVisible;
             MultipleChoiceDeleteButton.IsVisible = isVisible;
             ImageFillDeleteButton.IsVisible = isVisible;
+        }
+
+        private async void OnHelpClicked(object sender, EventArgs e)
+        {
+            try
+            {
+                await HelpOverlayControl.ShowHelp(HelpType.EditPage);
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"ヘルプ表示中にエラー: {ex.Message}");
+                await DisplayAlert("エラー", "ヘルプの表示に失敗しました", "OK");
+            }
         }
     }
 } 

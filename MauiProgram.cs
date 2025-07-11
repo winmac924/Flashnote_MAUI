@@ -34,6 +34,7 @@ public static class MauiProgram
 		builder.Services.AddSingleton<BlobStorageService>();
 		builder.Services.AddSingleton<SharedKeyService>();
 		builder.Services.AddSingleton<FileWatcherService>();
+		builder.Services.AddSingleton<AnimationService>();
 		builder.Services.AddSingleton<CardSyncService>(serviceProvider => 
 			new CardSyncService(
 				serviceProvider.GetRequiredService<BlobStorageService>(),

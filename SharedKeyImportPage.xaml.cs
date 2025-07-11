@@ -11,6 +11,7 @@ namespace Flashnote
         private string _previewedUserId;
         private string _previewedNotePath;
         private bool _previewedIsFolder;
+        private string _selectedFilePath;
 
         // インポート完了イベント
         public event EventHandler ImportCompleted;
@@ -21,6 +22,39 @@ namespace Flashnote
             _blobStorageService = blobStorageService;
             _sharedKeyService = sharedKeyService;
             _cardSyncService = cardSyncService;
+        }
+
+        private async void OnFileSelectClicked(object sender, EventArgs e)
+        {
+            try
+            {
+                var options = new PickOptions
+                {
+                    PickerTitle = "共有キーファイル（.fsk）を選択してください",
+                    FileTypes = new FilePickerFileType(
+                        new Dictionary<DevicePlatform, IEnumerable<string>>
+                        {
+                            { DevicePlatform.WinUI, new[] { ".fsk" } },
+                            { DevicePlatform.macOS, new[] { "fsk" } },
+                            { DevicePlatform.iOS, new[] { "public.data" } },
+                            { DevicePlatform.Android, new[] { "*/*" } }
+                        })
+                };
+
+                var result = await FilePicker.PickAsync(options);
+                if (result != null)
+                {
+                    _selectedFilePath = result.FullPath;
+                    SelectedFileName.Text = Path.GetFileName(_selectedFilePath);
+                    StatusLabel.Text = "ファイルが選択されました。インポートボタンを押してください。";
+                    StatusLabel.TextColor = Colors.Blue;
+                }
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"ファイル選択中にエラー: {ex.Message}");
+                await DisplayAlert("エラー", "ファイルの選択に失敗しました。", "OK");
+            }
         }
 
         private async void OnPreviewClicked(object sender, EventArgs e)
@@ -65,9 +99,17 @@ namespace Flashnote
 
         private async void OnImportClicked(object sender, EventArgs e)
         {
+            // ファイルが選択されている場合はファイルからインポート
+            if (!string.IsNullOrEmpty(_selectedFilePath))
+            {
+                await ImportFromFileAsync();
+                return;
+            }
+
+            // 共有キーが入力されている場合は従来の方法でインポート
             if (string.IsNullOrEmpty(_previewedUserId))
             {
-                StatusLabel.Text = "まずプレビューを実行してください。";
+                StatusLabel.Text = "まずプレビューを実行するか、ファイルを選択してください。";
                 StatusLabel.TextColor = Colors.Red;
                 return;
             }
@@ -155,6 +197,39 @@ namespace Flashnote
             {
                 Debug.WriteLine($"ノートのインポートに失敗: {ex.Message}");
                 StatusLabel.Text = "インポートに失敗しました。";
+                StatusLabel.TextColor = Colors.Red;
+            }
+            finally
+            {
+                LoadingIndicator.IsVisible = false;
+                LoadingIndicator.IsRunning = false;
+            }
+        }
+
+        private async Task ImportFromFileAsync()
+        {
+            LoadingIndicator.IsVisible = true;
+            LoadingIndicator.IsRunning = true;
+            StatusLabel.Text = "ファイルから共有キーをインポート中...";
+
+            try
+            {
+                var (imported, skipped) = await _sharedKeyService.ImportSharedKeysFromFileAsync(_selectedFilePath);
+                
+                StatusLabel.Text = $"インポート完了！追加: {imported}件, スキップ: {skipped}件";
+                StatusLabel.TextColor = Colors.Green;
+                
+                // インポート完了イベントを発火
+                ImportCompleted?.Invoke(this, EventArgs.Empty);
+                
+                // 2秒後にページを閉じる
+                await Task.Delay(2000);
+                await Navigation.PopAsync();
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"ファイルからのインポートに失敗: {ex.Message}");
+                StatusLabel.Text = $"インポートに失敗しました: {ex.Message}";
                 StatusLabel.TextColor = Colors.Red;
             }
             finally

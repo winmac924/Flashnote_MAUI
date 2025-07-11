@@ -3,6 +3,7 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
              xmlns:skia="clr-namespace:SkiaSharp.Views.Maui.Controls;assembly=SkiaSharp.Views.Maui.Controls"
              xmlns:views="clr-namespace:Flashnote.Views"
+             xmlns:fonts="clr-namespace:Flashnote.Resources.Fonts"
              x:Class="Flashnote.NotePage">
         <Grid>
                 <Grid.RowDefinitions>
@@ -71,6 +72,15 @@
                                                 Clicked="OnImportClicked"/>
                     <Button Text="保存"
                                                 Clicked="OnSaveClicked"/>
+                    <Button Text="{x:Static fonts:FluentUI.question_circle_24_regular}"
+                            FontFamily="FluentUI"
+                            FontSize="18"
+                            BackgroundColor="Transparent"
+                            TextColor="{AppThemeBinding Light=#666666, Dark=#CCCCCC}"
+                            WidthRequest="42"
+                            HeightRequest="42"
+                            CornerRadius="21"
+                            Clicked="OnHelpClicked"/>
                 </HorizontalStackLayout>
         </Grid>
 
@@ -107,5 +117,8 @@
                         </VerticalStackLayout>
                 </ScrollView>
                 </Grid>
+                
+                <!-- ヘルプオーバーレイ -->
+                <views:HelpOverlay x:Name="HelpOverlayControl" Grid.RowSpan="2"/>
         </Grid>
 </ContentPage>

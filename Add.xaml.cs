@@ -175,6 +175,21 @@ namespace Flashnote
         }
 
         /// <summary>
+        /// ヘルプボタンがクリックされた時の処理
+        /// </summary>
+        private async void OnHelpClicked(object sender, EventArgs e)
+        {
+            try
+            {
+                await HelpOverlayControl.ShowHelp(HelpType.AddPage);
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"ヘルプ表示エラー: {ex.Message}");
+            }
+        }
+
+        /// <summary>
         /// トースト風の通知を表示（画面下部オーバーレイ）
         /// </summary>
         private async Task ShowToast(string message)

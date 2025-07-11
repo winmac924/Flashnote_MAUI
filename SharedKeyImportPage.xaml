@@ -26,6 +26,21 @@
                 </StackLayout>
             </Frame>
             
+            <Frame BackgroundColor="LightYellow" Padding="15" CornerRadius="10">
+                <StackLayout Spacing="10">
+                    <Label Text="または、共有キーファイル（.fsk）を選択" FontSize="16" FontAttributes="Bold"/>
+                    <Button Text="ファイルを選択" 
+                            BackgroundColor="Blue" 
+                            TextColor="White"
+                            HorizontalOptions="FillAndExpand"
+                            Clicked="OnFileSelectClicked"/>
+                    <Label x:Name="SelectedFileName" 
+                           Text="ファイルが選択されていません" 
+                           FontSize="12" 
+                           TextColor="Gray"/>
+                </StackLayout>
+            </Frame>
+            
             <Frame BackgroundColor="LightBlue" Padding="15" CornerRadius="10" IsVisible="False" x:Name="InfoFrame">
                 <StackLayout Spacing="5">
                     <Label Text="ノート情報" FontSize="16" FontAttributes="Bold"/>

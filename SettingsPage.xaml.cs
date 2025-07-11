@@ -3,18 +3,29 @@ using System;
 using System.Diagnostics;
 using System.Threading.Tasks;
 using Firebase.Auth;
+using Flashnote.Services;
+using Flashnote.Models;
 using Flashnote_MAUI.Services;
+using System.Collections.ObjectModel;
+using System.Linq;
 
 namespace Flashnote
 {
     public partial class SettingsPage : ContentPage
     {
+        private readonly SharedKeyService _sharedKeyService;
+        private ObservableCollection<ImportedSharedKeyItem> _importedSharedKeys;
+
         public SettingsPage()
         {
             InitializeComponent();
+            _sharedKeyService = new SharedKeyService();
+            _importedSharedKeys = new ObservableCollection<ImportedSharedKeyItem>();
+            
             _ = LoadSavedLoginInfo();
             LoadAppVersion();
             UpdateLoginStatus();
+            LoadImportedSharedKeys();
         }
 
         protected override async void OnAppearing()
@@ -22,6 +33,7 @@ namespace Flashnote
             base.OnAppearing();
             await LoadSavedLoginInfo();
             UpdateLoginStatus();
+            LoadImportedSharedKeys();
         }
 
         private async Task LoadSavedLoginInfo()
@@ -202,6 +214,67 @@ namespace Flashnote
             {
                 Debug.WriteLine($"MainPageへの移動中にエラー: {ex.Message}");
                 await UIThreadHelper.ShowAlertAsync("エラー", "MainPageへの移動に失敗しました。", "OK");
+            }
+        }
+
+        private void LoadImportedSharedKeys()
+        {
+            try
+            {
+                _importedSharedKeys.Clear();
+                var sharedNotes = _sharedKeyService.GetSharedNotes();
+                
+                foreach (var (noteName, sharedInfo) in sharedNotes)
+                {
+                    var item = new ImportedSharedKeyItem
+                    {
+                        NoteName = noteName,
+                        Info = $"タイプ: {(sharedInfo.IsFolder ? "フォルダ" : "ノート")} | パス: {sharedInfo.NotePath} | 共有元: {sharedInfo.OriginalUserId}"
+                    };
+                    _importedSharedKeys.Add(item);
+                }
+                
+                ImportedSharedKeysCollection.ItemsSource = _importedSharedKeys;
+                
+                // ステータスラベルの更新
+                if (_importedSharedKeys.Count > 0)
+                {
+                    ImportedKeysStatusLabel.Text = $"インポートされた共有キー: {_importedSharedKeys.Count}件";
+                    ImportedKeysStatusLabel.TextColor = Colors.Green;
+                }
+                else
+                {
+                    ImportedKeysStatusLabel.Text = "インポートされた共有キーがありません";
+                    ImportedKeysStatusLabel.TextColor = Colors.Gray;
+                }
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"インポートされた共有キーの読み込み中にエラー: {ex.Message}");
+                ImportedKeysStatusLabel.Text = "共有キーの読み込みに失敗しました";
+                ImportedKeysStatusLabel.TextColor = Colors.Red;
+            }
+        }
+
+        private async void OnRemoveImportedSharedKeyClicked(object sender, EventArgs e)
+        {
+            try
+            {
+                if (sender is Button button && button.CommandParameter is string noteName)
+                {
+                    bool result = await UIThreadHelper.ShowAlertAsync("確認", $"共有キー「{noteName}」を削除しますか？", "はい", "いいえ");
+                    if (result)
+                    {
+                        _sharedKeyService.RemoveSharedNote(noteName);
+                        LoadImportedSharedKeys(); // リストを再読み込み
+                        await UIThreadHelper.ShowAlertAsync("完了", "共有キーを削除しました。", "OK");
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"共有キーの削除中にエラー: {ex.Message}");
+                await UIThreadHelper.ShowAlertAsync("エラー", "共有キーの削除に失敗しました。", "OK");
             }
         }
     }

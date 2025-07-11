@@ -124,6 +124,7 @@
 	  <MauiXaml Update="Qa.xaml">
 	    <Generator>MSBuild:Compile</Generator>
 	  </MauiXaml>
+
 	</ItemGroup>
 
 	<ItemGroup>

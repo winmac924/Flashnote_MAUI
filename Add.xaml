@@ -1,13 +1,55 @@
 <ContentPage xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
              xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
-             x:Class="Flashnote.Add"
-             Title="カードの追加">
+             xmlns:fonts="clr-namespace:Flashnote.Resources.Fonts"
+             xmlns:views="clr-namespace:Flashnote.Views"
+             x:Class="Flashnote.Add">
 
-    <ScrollView>
-        <VerticalStackLayout x:Name="CardContainer" 
-                             Padding="10"
-                             Spacing="10">
-            <!-- CardManagerによって動的に生成されるUI -->
-        </VerticalStackLayout>
-    </ScrollView>
+    <Grid>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+        </Grid.RowDefinitions>
+
+        <!-- ヘッダー部分 -->
+        <Grid Grid.Row="0" 
+              BackgroundColor="{AppThemeBinding Light=#F0F0F0, Dark=#2D2D30}"
+              Padding="15,10">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*"/>
+                <ColumnDefinition Width="Auto"/>
+            </Grid.ColumnDefinitions>
+
+            <!-- タイトル -->
+            <Label Grid.Column="0"
+                   Text="カードの追加"
+                   FontSize="20"
+                   FontAttributes="Bold"
+                   VerticalOptions="Center"
+                   TextColor="{AppThemeBinding Light=#1F1F1F, Dark=#FFFFFF}"/>
+
+            <!-- ヘルプボタン -->
+            <Button Grid.Column="1"
+                    Text="{x:Static fonts:FluentUI.question_circle_24_regular}"
+                    FontFamily="FluentUI"
+                    FontSize="18"
+                    BackgroundColor="Transparent"
+                    TextColor="{AppThemeBinding Light=#666666, Dark=#CCCCCC}"
+                    WidthRequest="42"
+                    HeightRequest="42"
+                    CornerRadius="21"
+                    Clicked="OnHelpClicked"/>
+        </Grid>
+
+        <!-- メインコンテンツ -->
+        <ScrollView Grid.Row="1">
+            <VerticalStackLayout x:Name="CardContainer" 
+                                 Padding="10"
+                                 Spacing="10">
+                <!-- CardManagerによって動的に生成されるUI -->
+            </VerticalStackLayout>
+        </ScrollView>
+
+        <!-- ヘルプオーバーレイ -->
+        <views:HelpOverlay x:Name="HelpOverlayControl" Grid.RowSpan="2"/>
+    </Grid>
 </ContentPage>

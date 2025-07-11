@@ -1,0 +1,199 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<ContentView xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+             xmlns:fonts="clr-namespace:Flashnote.Resources.Fonts"
+             x:Class="Flashnote.Views.HelpOverlay"
+             IsVisible="False">
+    
+    <ContentView.Resources>
+        <ResourceDictionary>
+            <!-- ヘルプカードスタイル -->
+            <Style x:Key="HelpCardStyle" TargetType="Frame">
+                <Setter Property="BackgroundColor" Value="{AppThemeBinding Light=White, Dark=#2D2D30}"/>
+                <Setter Property="BorderColor" Value="{AppThemeBinding Light=#E0E0E0, Dark=#404040}"/>
+                <Setter Property="CornerRadius" Value="12"/>
+                <Setter Property="HasShadow" Value="True"/>
+                <Setter Property="Padding" Value="20"/>
+                <Setter Property="Margin" Value="20"/>
+            </Style>
+            
+            <!-- ヘルプボタンスタイル -->
+            <Style x:Key="HelpButtonStyle" TargetType="Button">
+                <Setter Property="BackgroundColor" Value="{AppThemeBinding Light=#0078D4, Dark=#106EBE}"/>
+                <Setter Property="TextColor" Value="White"/>
+                <Setter Property="CornerRadius" Value="8"/>
+                <Setter Property="FontAttributes" Value="Bold"/>
+                <Setter Property="Padding" Value="16,8"/>
+                <Setter Property="Margin" Value="5"/>
+            </Style>
+            
+            <!-- ステップカードスタイル -->
+            <Style x:Key="StepCardStyle" TargetType="Frame">
+                <Setter Property="BackgroundColor" Value="{AppThemeBinding Light=#F8F9FA, Dark=#3C3C3C}"/>
+                <Setter Property="BorderColor" Value="{AppThemeBinding Light=#E9ECEF, Dark=#505050}"/>
+                <Setter Property="CornerRadius" Value="8"/>
+                <Setter Property="HasShadow" Value="False"/>
+                <Setter Property="Padding" Value="16"/>
+                <Setter Property="Margin" Value="0,8"/>
+            </Style>
+
+            <!-- メディア表示エリアスタイル -->
+            <Style x:Key="MediaContainerStyle" TargetType="Frame">
+                <Setter Property="BackgroundColor" Value="{AppThemeBinding Light=#F0F0F0, Dark=#404040}"/>
+                <Setter Property="BorderColor" Value="{AppThemeBinding Light=#D0D0D0, Dark=#505050}"/>
+                <Setter Property="CornerRadius" Value="8"/>
+                <Setter Property="HasShadow" Value="False"/>
+                <Setter Property="Padding" Value="12"/>
+                <Setter Property="Margin" Value="0,8"/>
+            </Style>
+        </ResourceDictionary>
+    </ContentView.Resources>
+    
+    <Grid x:Name="MainGrid">
+        <!-- 背景オーバーレイ -->
+        <BoxView x:Name="BackgroundOverlay"
+                 BackgroundColor="{AppThemeBinding Light=#80000000, Dark=#80000000}"
+                 Opacity="0"/>
+        
+        <!-- ヘルプコンテンツ -->
+        <ScrollView x:Name="HelpScrollView"
+                    VerticalOptions="Center"
+                    HorizontalOptions="Center"
+                    MaximumWidthRequest="500">
+            <Frame x:Name="HelpCard"
+                   Style="{StaticResource HelpCardStyle}"
+                   Opacity="0"
+                   Scale="0.8">
+                <StackLayout Spacing="16">
+                    <!-- ヘッダー -->
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto"/>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+                        
+                        <!-- アイコン -->
+                        <Label x:Name="HelpIcon"
+                               Grid.Column="0"
+                               FontSize="32"
+                               VerticalOptions="Center"
+                               Margin="0,0,12,0"/>
+                        
+                        <!-- タイトル -->
+                        <StackLayout Grid.Column="1" Spacing="4">
+                            <Label x:Name="HelpTitle"
+                                   FontSize="20"
+                                   FontAttributes="Bold"
+                                   TextColor="{AppThemeBinding Light=#1F1F1F, Dark=#FFFFFF}"/>
+                            <Label x:Name="HelpDescription"
+                                   FontSize="14"
+                                   TextColor="{AppThemeBinding Light=#666666, Dark=#CCCCCC}"
+                                   LineBreakMode="WordWrap"/>
+                        </StackLayout>
+                        
+                        <!-- 閉じるボタン -->
+                        <Button x:Name="CloseButton"
+                                Grid.Column="2"
+                                Text="{x:Static fonts:FluentUI.dismiss_24_regular}"
+                                FontFamily="FluentUI"
+                                FontSize="20"
+                                BackgroundColor="Transparent"
+                                TextColor="{AppThemeBinding Light=#666666, Dark=#CCCCCC}"
+                                WidthRequest="32"
+                                HeightRequest="32"
+                                CornerRadius="16"
+                                Clicked="OnCloseClicked"/>
+                    </Grid>
+
+                    <!-- メディア表示エリア -->
+                    <Frame x:Name="MediaContainer"
+                           Style="{StaticResource MediaContainerStyle}"
+                           IsVisible="False"
+                           HeightRequest="200">
+                        <Grid>
+                            <!-- 動画プレイヤー -->
+                            <WebView x:Name="VideoPlayer"
+                                     IsVisible="False"
+                                     HeightRequest="180"/>
+                            
+                            <!-- スクリーンショット表示 -->
+                            <Image x:Name="ScreenshotImage"
+                                   IsVisible="False"
+                                   Aspect="AspectFit"
+                                   HeightRequest="180"/>
+                            
+                            <!-- アニメーション表示エリア -->
+                            <Frame x:Name="AnimationContainer"
+                                   IsVisible="False"
+                                   BackgroundColor="Transparent"
+                                   BorderColor="Transparent"
+                                   HeightRequest="180">
+                                <Label x:Name="AnimationLabel"
+                                       FontSize="48"
+                                       HorizontalOptions="Center"
+                                       VerticalOptions="Center"/>
+                            </Frame>
+                            
+                            <!-- メディアコントロール -->
+                            <StackLayout x:Name="MediaControls"
+                                         Orientation="Horizontal"
+                                         HorizontalOptions="Center"
+                                         VerticalOptions="End"
+                                         Spacing="10"
+                                         Margin="0,0,0,10">
+                                <Button x:Name="PlayButton"
+                                        Text="{x:Static fonts:FluentUI.play_24_regular}"
+                                        FontFamily="FluentUI"
+                                        FontSize="16"
+                                        BackgroundColor="{AppThemeBinding Light=#0078D4, Dark=#106EBE}"
+                                        TextColor="White"
+                                        WidthRequest="32"
+                                        HeightRequest="32"
+                                        CornerRadius="16"
+                                        Clicked="OnPlayClicked"/>
+                                <Button x:Name="PauseButton"
+                                        Text="{x:Static fonts:FluentUI.pause_24_regular}"
+                                        FontFamily="FluentUI"
+                                        FontSize="16"
+                                        BackgroundColor="{AppThemeBinding Light=#666666, Dark=#CCCCCC}"
+                                        TextColor="White"
+                                        WidthRequest="32"
+                                        HeightRequest="32"
+                                        CornerRadius="16"
+                                        IsVisible="False"
+                                        Clicked="OnPauseClicked"/>
+                            </StackLayout>
+                        </Grid>
+                    </Frame>
+                    
+                    <!-- ステップリスト -->
+                    <StackLayout x:Name="StepsContainer" Spacing="8">
+                        <!-- ステップは動的に追加 -->
+                    </StackLayout>
+                    
+                    <!-- フッター -->
+                    <StackLayout Orientation="Horizontal" 
+                                HorizontalOptions="End" 
+                                Spacing="8"
+                                Margin="0,8,0,0">
+                        <Button x:Name="PreviousButton"
+                                Text="前へ"
+                                Style="{StaticResource HelpButtonStyle}"
+                                IsVisible="False"
+                                Clicked="OnPreviousClicked"/>
+                        <Button x:Name="NextButton"
+                                Text="次へ"
+                                Style="{StaticResource HelpButtonStyle}"
+                                Clicked="OnNextClicked"/>
+                        <Button x:Name="FinishButton"
+                                Text="完了"
+                                Style="{StaticResource HelpButtonStyle}"
+                                IsVisible="False"
+                                Clicked="OnFinishClicked"/>
+                    </StackLayout>
+                </StackLayout>
+            </Frame>
+        </ScrollView>
+    </Grid>
+</ContentView> 

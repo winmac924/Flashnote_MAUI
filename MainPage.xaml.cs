@@ -8,6 +8,7 @@ using Microsoft.Maui.Storage;
 using Flashnote.Services;
 using Flashnote.ViewModels;
 using Flashnote.Models;
+using Flashnote.Views;
 using System;
 using System.Threading.Tasks;
 using System.Linq;
@@ -838,6 +839,8 @@ namespace Flashnote
                 _viewModel.Notes.Insert(0, newNote);
                 Debug.WriteLine($"ノートを追加しました: {noteName}");
 
+
+
                 // メインページを更新
                 LoadNotes();
                 Debug.WriteLine($"メインページを更新しました");
@@ -1031,17 +1034,6 @@ namespace Flashnote
             }
 
             UpdateSpan(width);
-            
-            // キーボードイベントの設定を試行（まだ設定されていない場合）
-            if (!_keyboardEventsSetup)
-            {
-                _keyboardEventsSetup = true;
-                MainThread.BeginInvokeOnMainThread(async () =>
-                {
-                    await Task.Delay(200); // 少し待機してから設定
-                    SetupKeyboardEvents();
-                });
-            }
         }
 
         private void UpdateSpan(double width)
@@ -1074,6 +1066,21 @@ namespace Flashnote
                 }
             }
         }
+
+        private async void OnHelpClicked(object sender, EventArgs e)
+        {
+            try
+            {
+                await HelpOverlayControl.ShowHelp(HelpType.MainPage);
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"ヘルプ表示中にエラー: {ex.Message}");
+                await DisplayAlert("エラー", "ヘルプの表示に失敗しました。", "OK");
+            }
+        }
+
+
 
         private async void OnSettingsClicked(object sender, EventArgs e)
         {
@@ -1207,6 +1214,10 @@ namespace Flashnote
                 {
                     System.Diagnostics.Debug.WriteLine($"[DEBUG] Windowクリーンアップエラー: {windowEx.Message}");
                 }
+                
+                // フラグをリセット（再設定可能にする）
+                _keyboardEventsSetup = false;
+                _isProcessingKeyboardEvent = false;
                 
                 System.Diagnostics.Debug.WriteLine("[DEBUG] キーボードイベントクリーンアップ完了");
             }
