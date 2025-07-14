@@ -337,8 +337,6 @@
                                 <AppThemeBinding Light="Gray" Dark="#555555" />
                             </Frame.BorderColor>
                             <skia:SKCanvasView x:Name="CanvasView"
-                                           WidthRequest="400"
-                                           HeightRequest="300"
                                            HorizontalOptions="Fill"
                                            IsEnabled="True"
                                            PaintSurface="OnCanvasViewPaintSurface"

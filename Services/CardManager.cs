@@ -56,11 +56,13 @@ namespace Flashnote.Services
         
         // 画像穴埋めカード用
         private string _selectedImagePath = "";
-        private List<SkiaSharp.SKRect> _selectionRects = new List<SkiaSharp.SKRect>();
+        private List<SkiaSharp.SKRect> _selectionRects = new List<SkiaSharp.SKRect>();  // 画像座標（ピクセル単位）
         private SkiaSharp.SKBitmap _imageBitmap;
         private SkiaSharp.SKPoint _startPoint, _endPoint;
         private bool _isDragging = false;
         private const float HANDLE_SIZE = 15;
+        private const float MAX_CANVAS_WIDTH = 600f;  // キャンバスの最大幅
+        private const float MAX_CANVAS_HEIGHT = 800f; // キャンバスの最大高さ
         private SkiaSharp.Views.Maui.Controls.SKCanvasView _canvasView;
         
         // 編集対象のカードID（編集モード用）
@@ -296,6 +298,51 @@ namespace Flashnote.Services
         }
 
         /// <summary>
+        /// 画像のアスペクト比に合わせてキャンバスサイズを調整する
+        /// </summary>
+        private void AdjustCanvasSizeToImage()
+        {
+            if (_imageBitmap == null || _canvasView == null)
+            {
+                // 画像またはキャンバスがない場合はデフォルトサイズ
+                if (_canvasView != null)
+                {
+                    _canvasView.WidthRequest = 400;
+                    _canvasView.HeightRequest = 300;
+                }
+                return;
+            }
+
+            float imageAspect = (float)_imageBitmap.Width / _imageBitmap.Height;
+            float canvasWidth, canvasHeight;
+
+            if (imageAspect > 1.0f)
+            {
+                // 横長の画像
+                canvasWidth = Math.Min(MAX_CANVAS_WIDTH, _imageBitmap.Width);
+                canvasHeight = canvasWidth / imageAspect;
+            }
+            else
+            {
+                // 縦長の画像
+                canvasHeight = Math.Min(MAX_CANVAS_HEIGHT, _imageBitmap.Height);
+                canvasWidth = canvasHeight * imageAspect;
+            }
+
+            // 最小サイズを確保
+            canvasWidth = Math.Max(canvasWidth, 200);
+            canvasHeight = Math.Max(canvasHeight, 150);
+
+            Debug.WriteLine($"キャンバスサイズ調整: 画像={_imageBitmap.Width}x{_imageBitmap.Height}, アスペクト比={imageAspect:F2}, キャンバス={canvasWidth:F0}x{canvasHeight:F0}");
+
+            _canvasView.WidthRequest = canvasWidth;
+            _canvasView.HeightRequest = canvasHeight;
+            
+            // キャンバスを再描画してサイズ変更を反映
+            _canvasView.InvalidateSurface();
+        }
+
+        /// <summary>
         /// 画像穴埋め用に画像を読み込み
         /// </summary>
         public async Task LoadImageForImageFill(string imagePath)
@@ -337,9 +384,9 @@ namespace Flashnote.Services
 
                 if (_imageBitmap != null && _canvasView != null)
                 {
-                    Debug.WriteLine("CanvasView再描画を要求中...");
-                    _canvasView.InvalidateSurface();
-                    Debug.WriteLine("InvalidateSurface完了");
+                    // キャンバスサイズを画像のアスペクト比に合わせて調整
+                    AdjustCanvasSizeToImage();
+                    Debug.WriteLine("キャンバスサイズ調整完了");
                 }
                 else
                 {
@@ -1343,7 +1390,12 @@ namespace Flashnote.Services
                 SaveBitmapToFile(_imageBitmap, imgFilePath);
                 _selectedImagePath = imgFileName;
                 _imagePaths.Add(imgFilePath);
-                _canvasView?.InvalidateSurface();
+                
+                // キャンバスサイズを画像のアスペクト比に合わせて調整
+                if (_canvasView != null)
+                {
+                    AdjustCanvasSizeToImage();
+                }
             }
         }
 
@@ -2585,14 +2637,55 @@ namespace Flashnote.Services
                             var width = widthElement.GetSingle();
                             var height = heightElement.GetSingle();
                         
-                        _selectionRects.Add(new SKRect(x, y, x + width, y + height));
+                            // 既存のデータが正規化座標かどうかを判定
+                            // x, y, width, heightが全て0.0-1.0の範囲にある場合は正規化座標とみなす
+                            bool isNormalized = x >= 0.0f && x <= 1.0f && 
+                                               y >= 0.0f && y <= 1.0f && 
+                                               width >= 0.0f && width <= 1.0f && 
+                                               height >= 0.0f && height <= 1.0f;
+                            
+                            SKRect selectionRect;
+                            if (isNormalized)
+                            {
+                                // 正規化座標の場合は画像座標に変換
+                                if (_imageBitmap != null)
+                                {
+                                    float imageX = x * _imageBitmap.Width;
+                                    float imageY = y * _imageBitmap.Height;
+                                    float imageWidth = width * _imageBitmap.Width;
+                                    float imageHeight = height * _imageBitmap.Height;
+                                    
+                                    selectionRect = new SKRect(imageX, imageY, imageX + imageWidth, imageY + imageHeight);
+                                    Debug.WriteLine($"正規化座標を画像座標に変換: 元={x},{y},{width},{height}, 画像サイズ={_imageBitmap.Width}x{_imageBitmap.Height} -> 画像座標={selectionRect}");
+                                }
+                                else
+                                {
+                                    // 画像が読み込まれていない場合は仮のサイズで計算
+                                    float imageX = x * 1000.0f;
+                                    float imageY = y * 1000.0f;
+                                    float imageWidth = width * 1000.0f;
+                                    float imageHeight = height * 1000.0f;
+                                    
+                                    selectionRect = new SKRect(imageX, imageY, imageX + imageWidth, imageY + imageHeight);
+                                    Debug.WriteLine($"正規化座標を画像座標に変換（仮サイズ）: 元={x},{y},{width},{height} -> 画像座標={selectionRect}");
+                                }
+                            }
+                            else
+                            {
+                                // 既に画像座標の場合
+                                selectionRect = new SKRect(x, y, x + width, y + height);
+                                Debug.WriteLine($"画像座標として読み込み: {selectionRect}");
+                            }
+                            
+                            _selectionRects.Add(selectionRect);
                         }
                     }
                     
                     // キャンバスを更新
                     if (_canvasView != null)
                     {
-                        _canvasView.InvalidateSurface();
+                        // キャンバスサイズを画像のアスペクト比に合わせて調整
+                        AdjustCanvasSizeToImage();
                     }
                 }
             }
@@ -2616,7 +2709,8 @@ namespace Flashnote.Services
                     
                     if (_canvasView != null)
                     {
-                        _canvasView.InvalidateSurface();
+                        // キャンバスサイズを画像のアスペクト比に合わせて調整
+                        AdjustCanvasSizeToImage();
                     }
                     
                     Debug.WriteLine($"画像読み込み完了: {imagePath}");
@@ -2859,13 +2953,13 @@ namespace Flashnote.Services
                     return;
                 }
                 
-                // 選択範囲を正しい形式でシリアライズ
+                // 選択範囲を正しい形式でシリアライズ（画像座標）
                 var selections = _selectionRects.Select(rect => new
                 {
-                    x = rect.Left,
-                    y = rect.Top,
-                    width = rect.Width,
-                    height = rect.Height
+                    x = rect.Left,  // 画像座標（ピクセル単位）
+                    y = rect.Top,   // 画像座標（ピクセル単位）
+                    width = rect.Width,  // 画像座標（ピクセル単位）
+                    height = rect.Height // 画像座標（ピクセル単位）
                 }).ToList();
                 
                 var cardId = string.IsNullOrEmpty(_editCardId) ? Guid.NewGuid().ToString() : _editCardId;
@@ -3453,6 +3547,55 @@ namespace Flashnote.Services
 
 
         /// <summary>
+        /// 画像座標をキャンバス座標に変換する（iOS版に合わせて絶対座標を使用）
+        /// </summary>
+        private SKRect ImageToCanvasRect(SKRect imageRect, float canvasWidth, float canvasHeight)
+        {
+            // 画像の実際のサイズとキャンバスサイズの比率を計算
+            float scaleX = 1.0f;
+            float scaleY = 1.0f;
+            
+            if (_imageBitmap != null)
+            {
+                scaleX = canvasWidth / _imageBitmap.Width;
+                scaleY = canvasHeight / _imageBitmap.Height;
+            }
+            
+            var result = new SKRect(
+                imageRect.Left * scaleX,
+                imageRect.Top * scaleY,
+                imageRect.Right * scaleX,
+                imageRect.Bottom * scaleY
+            );
+            
+            Debug.WriteLine($"画像座標変換: 入力={imageRect}, 画像サイズ={_imageBitmap?.Width}x{_imageBitmap?.Height}, キャンバスサイズ={canvasWidth}x{canvasHeight}, 拡大率=({scaleX:F3},{scaleY:F3}), 出力={result}");
+            return result;
+        }
+
+        /// <summary>
+        /// キャンバス座標を画像座標に変換する（iOS版に合わせて絶対座標を使用）
+        /// </summary>
+        private SKRect CanvasToImageRect(SKRect canvasRect, float canvasWidth, float canvasHeight)
+        {
+            // 画像の実際のサイズとキャンバスサイズの比率を計算
+            float scaleX = 1.0f;
+            float scaleY = 1.0f;
+            
+            if (_imageBitmap != null)
+            {
+                scaleX = canvasWidth / _imageBitmap.Width;
+                scaleY = canvasHeight / _imageBitmap.Height;
+            }
+            
+            return new SKRect(
+                canvasRect.Left / scaleX,
+                canvasRect.Top / scaleY,
+                canvasRect.Right / scaleX,
+                canvasRect.Bottom / scaleY
+            );
+        }
+
+        /// <summary>
         /// キャンバス描画イベント
         /// </summary>
         private void OnCanvasViewPaintSurface(object sender, SKPaintSurfaceEventArgs e)
@@ -3488,10 +3631,13 @@ namespace Flashnote.Services
                 StrokeWidth = 3
             })
             {
-                foreach (var rect in _selectionRects)
+                // 画像座標をキャンバス座標に変換して描画
+                foreach (var imageRect in _selectionRects)
                 {
-                    canvas.DrawRect(rect, paint);
-                    DrawResizeHandles(canvas, rect);
+                    var canvasRect = ImageToCanvasRect(imageRect, e.Info.Width, e.Info.Height);
+                    Debug.WriteLine($"選択範囲描画: 画像座標={imageRect}, キャンバス={canvasRect}, キャンバスサイズ={e.Info.Width}x{e.Info.Height}");
+                    canvas.DrawRect(canvasRect, paint);
+                    DrawResizeHandles(canvas, canvasRect);
                 }
 
                 if (_isDragging)
@@ -3541,10 +3687,17 @@ namespace Flashnote.Services
                     if (e.MouseButton == SKMouseButton.Right)
                     {
                         // 右クリックで削除メニュー表示
-                        var clickedRect = _selectionRects.FirstOrDefault(r => r.Contains(point));
+                        // キャンバス座標を画像座標に変換して比較
+                        var canvasSize = _canvasView.CanvasSize;
+                        var clickedRect = _selectionRects.FirstOrDefault(r => 
+                        {
+                            var actualRect = ImageToCanvasRect(r, canvasSize.Width, canvasSize.Height);
+                            return actualRect.Contains(point);
+                        });
                         if (clickedRect != SKRect.Empty)
                         {
-                            ShowContextMenu(point, clickedRect);
+                            var actualRect = ImageToCanvasRect(clickedRect, canvasSize.Width, canvasSize.Height);
+                            ShowContextMenu(point, actualRect);
                         }
                     }
                     else
@@ -3566,16 +3719,20 @@ namespace Flashnote.Services
                 case SKTouchAction.Released:
                     if (_isDragging)
                     {
-                        var rect = SKRect.Create(
+                        var canvasRect = SKRect.Create(
                             Math.Min(_startPoint.X, _endPoint.X),
                             Math.Min(_startPoint.Y, _endPoint.Y),
                             Math.Abs(_endPoint.X - _startPoint.X),
                             Math.Abs(_endPoint.Y - _startPoint.Y)
                         );
 
-                        if (!rect.IsEmpty && rect.Width > 5 && rect.Height > 5)
+                        if (!canvasRect.IsEmpty && canvasRect.Width > 5 && canvasRect.Height > 5)
                         {
-                            _selectionRects.Add(rect);
+                            // キャンバス座標を画像座標に変換して保存
+                            var canvasSize = _canvasView.CanvasSize;
+                            var imageRect = CanvasToImageRect(canvasRect, canvasSize.Width, canvasSize.Height);
+                            _selectionRects.Add(imageRect);
+                            Debug.WriteLine($"選択範囲追加: キャンバス座標={canvasRect}, キャンバスサイズ={canvasSize.Width}x{canvasSize.Height}, 画像座標={imageRect}");
                         }
                     }
 
@@ -3596,8 +3753,23 @@ namespace Flashnote.Services
 
             if (action == "削除")
             {
-                _selectionRects.Remove(rect);
-                _canvasView?.InvalidateSurface();
+                // キャンバス座標を画像座標に変換して比較
+                var canvasSize = _canvasView.CanvasSize;
+                var imageRect = CanvasToImageRect(rect, canvasSize.Width, canvasSize.Height);
+                
+                // 最も近い選択範囲を見つけて削除
+                var rectToRemove = _selectionRects.FirstOrDefault(r => 
+                    Math.Abs(r.Left - imageRect.Left) < 1.0f &&
+                    Math.Abs(r.Top - imageRect.Top) < 1.0f &&
+                    Math.Abs(r.Width - imageRect.Width) < 1.0f &&
+                    Math.Abs(r.Height - imageRect.Height) < 1.0f);
+                
+                if (rectToRemove != SKRect.Empty)
+                {
+                    _selectionRects.Remove(rectToRemove);
+                    _canvasView?.InvalidateSurface();
+                    Debug.WriteLine($"選択範囲削除: {rectToRemove}");
+                }
             }
         }
 

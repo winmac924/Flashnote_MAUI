@@ -20,13 +20,105 @@ namespace Flashnote
         private string editCardId = null;    // 編集対象のカードID
         private bool isDirty = false;        // 変更があるかどうかのフラグ
         private System.Timers.Timer autoSaveTimer;  // 自動保存用タイマー
-        private List<SKRect> selectionRects = new List<SKRect>();  // 画像穴埋め用の選択範囲
+        private List<SKRect> selectionRects = new List<SKRect>();  // 画像穴埋め用の選択範囲（画像座標）
         private SKBitmap imageBitmap;         // 画像を表示するためのビットマップ
+        private string selectedImagePath;     // 選択された画像のパス
         private SKPoint startPoint, endPoint;
         private bool isDragging = false;
         private const float HANDLE_SIZE = 15;
+        private const float MAX_CANVAS_WIDTH = 600f;  // キャンバスの最大幅
+        private const float MAX_CANVAS_HEIGHT = 800f; // キャンバスの最大高さ
 
+        /// <summary>
+        /// 画像座標をキャンバス座標に変換する（iOS版に合わせて絶対座標を使用）
+        /// </summary>
+        private SKRect ImageToCanvasRect(SKRect imageRect, float canvasWidth, float canvasHeight)
+        {
+            // 画像の実際のサイズとキャンバスサイズの比率を計算
+            float scaleX = 1.0f;
+            float scaleY = 1.0f;
+            
+            if (imageBitmap != null)
+            {
+                scaleX = canvasWidth / imageBitmap.Width;
+                scaleY = canvasHeight / imageBitmap.Height;
+            }
+            
+            var result = new SKRect(
+                imageRect.Left * scaleX,
+                imageRect.Top * scaleY,
+                imageRect.Right * scaleX,
+                imageRect.Bottom * scaleY
+            );
+            
+            Debug.WriteLine($"画像座標変換: 入力={imageRect}, 画像サイズ={imageBitmap?.Width}x{imageBitmap?.Height}, キャンバスサイズ={canvasWidth}x{canvasHeight}, 拡大率=({scaleX:F3},{scaleY:F3}), 出力={result}");
+            return result;
+        }
 
+        /// <summary>
+        /// キャンバス座標を画像座標に変換する（iOS版に合わせて絶対座標を使用）
+        /// </summary>
+        private SKRect CanvasToImageRect(SKRect canvasRect, float canvasWidth, float canvasHeight)
+        {
+            // 画像の実際のサイズとキャンバスサイズの比率を計算
+            float scaleX = 1.0f;
+            float scaleY = 1.0f;
+            
+            if (imageBitmap != null)
+            {
+                scaleX = canvasWidth / imageBitmap.Width;
+                scaleY = canvasHeight / imageBitmap.Height;
+            }
+            
+            return new SKRect(
+                canvasRect.Left / scaleX,
+                canvasRect.Top / scaleY,
+                canvasRect.Right / scaleX,
+                canvasRect.Bottom / scaleY
+            );
+        }
+
+        /// <summary>
+        /// 画像のアスペクト比に合わせてキャンバスサイズを調整する
+        /// </summary>
+        private void AdjustCanvasSizeToImage()
+        {
+            if (imageBitmap == null)
+            {
+                // 画像がない場合はデフォルトサイズ
+                CanvasView.WidthRequest = 400;
+                CanvasView.HeightRequest = 300;
+                return;
+            }
+
+            float imageAspect = (float)imageBitmap.Width / imageBitmap.Height;
+            float canvasWidth, canvasHeight;
+
+            if (imageAspect > 1.0f)
+            {
+                // 横長の画像
+                canvasWidth = Math.Min(MAX_CANVAS_WIDTH, imageBitmap.Width);
+                canvasHeight = canvasWidth / imageAspect;
+            }
+            else
+            {
+                // 縦長の画像
+                canvasHeight = Math.Min(MAX_CANVAS_HEIGHT, imageBitmap.Height);
+                canvasWidth = canvasHeight * imageAspect;
+            }
+
+            // 最小サイズを確保
+            canvasWidth = Math.Max(canvasWidth, 200);
+            canvasHeight = Math.Max(canvasHeight, 150);
+
+            Debug.WriteLine($"キャンバスサイズ調整: 画像={imageBitmap.Width}x{imageBitmap.Height}, アスペクト比={imageAspect:F2}, キャンバス={canvasWidth:F0}x{canvasHeight:F0}");
+
+            CanvasView.WidthRequest = canvasWidth;
+            CanvasView.HeightRequest = canvasHeight;
+            
+            // キャンバスを再描画してサイズ変更を反映
+            CanvasView.InvalidateSurface();
+        }
 
         public class CardInfo
         {
@@ -156,6 +248,7 @@ namespace Flashnote
 
         private void OnTextChanged(object sender, TextChangedEventArgs e)
         {
+            Debug.WriteLine($"OnTextChanged: {sender.GetType().Name} - isDirtyをtrueに設定");
             isDirty = true;
             // タイマーをリセット
             autoSaveTimer.Stop();
@@ -270,9 +363,23 @@ namespace Flashnote
 
         private async void AutoSaveTimer_Elapsed(object sender, System.Timers.ElapsedEventArgs e)
         {
+            Debug.WriteLine($"自動保存タイマー: isDirty={isDirty}, editCardId={editCardId}");
+            
             if (isDirty && !string.IsNullOrEmpty(editCardId))
             {
+                Debug.WriteLine("自動保存タイマー: 内容が変更されているため保存を実行");
                 await SaveCurrentCard();
+            }
+            else
+            {
+                if (string.IsNullOrEmpty(editCardId))
+                {
+                    Debug.WriteLine("自動保存タイマー: editCardIdが空のため保存をスキップ");
+                }
+                else
+                {
+                    Debug.WriteLine("自動保存タイマー: 内容に変更がないため保存をスキップ");
+                }
             }
         }
 
@@ -320,11 +427,12 @@ namespace Flashnote
                     choices = choices,
                     selectionRects = selectionRects.Select(r => new
                     {
-                        x = r.Left,
-                        y = r.Top,
-                        width = r.Width,
-                        height = r.Height
-                    }).ToList()
+                        x = r.Left,  // 画像座標（ピクセル単位）
+                        y = r.Top,   // 画像座標（ピクセル単位）
+                        width = r.Width,  // 画像座標（ピクセル単位）
+                        height = r.Height // 画像座標（ピクセル単位）
+                    }).ToList(),
+                    imagePath = selectedImagePath  // 画像穴埋め用の画像パス
                 };
 
                 string jsonPath = Path.Combine(tempExtractPath, "cards", $"{editCardId}.json");
@@ -375,15 +483,28 @@ namespace Flashnote
                         }
 
                         await File.WriteAllLinesAsync(cardsFilePath, newLines);
+                        Debug.WriteLine($"cards.txtの更新日時を更新しました: {editCardId}");
                     }
                 }
-
-                // .ankpls を更新
-                if (File.Exists(ankplsFilePath))
+                else
                 {
-                    File.Delete(ankplsFilePath);
+                    Debug.WriteLine("内容に変更がないため、cards.txtの更新日時は更新しません");
                 }
-                ZipFile.CreateFromDirectory(tempExtractPath, ankplsFilePath);
+
+                // .ankpls を更新（内容が変更された場合のみ）
+                if (isDirty)
+                {
+                    if (File.Exists(ankplsFilePath))
+                    {
+                        File.Delete(ankplsFilePath);
+                    }
+                    ZipFile.CreateFromDirectory(tempExtractPath, ankplsFilePath);
+                    Debug.WriteLine(".ankplsファイルを更新しました");
+                }
+                else
+                {
+                    Debug.WriteLine("内容に変更がないため、.ankplsファイルは更新しません");
+                }
 
                 isDirty = false;
                 Debug.WriteLine("カードを自動保存しました");
@@ -399,15 +520,13 @@ namespace Flashnote
         {
             if (e.CurrentSelection.FirstOrDefault() is CardInfo selectedCard)
             {
-                // 現在のカードを保存
-                if (isDirty && !string.IsNullOrEmpty(editCardId))
-                {
-                    await SaveCurrentCard();
-                }
+                // カード選択時は保存処理を行わない（内容が変更されていても）
+                // 前のカードの変更は画面を離れる時（OnDisappearing）に保存される
+                Debug.WriteLine($"カード選択開始: {selectedCard.Id} - 保存処理は行いません");
 
                 // 新しいカードを読み込む
                 editCardId = selectedCard.Id;
-                LoadCardData(selectedCard.Id);
+                await LoadCardData(selectedCard.Id);
                 
                 // 削除ボタンを表示する
                 UpdateDeleteButtonVisibility(true);
@@ -440,17 +559,30 @@ namespace Flashnote
                         ChoiceExplanationPreviewLabel.ShowAnswer = false;
                         ChoiceExplanationPreviewLabel.ImageFolderPath = tempExtractPath;
                         break;
+                    case "画像穴埋め":
+                        Debug.WriteLine("画像穴埋めカードのプレビューを更新");
+                        // 画像穴埋めカードの場合は、LoadCardDataで既に画像が読み込まれているので
+                        // キャンバスの再描画のみ行う
+                        CanvasView.InvalidateSurface();
+                        break;
                 }
+                
+                Debug.WriteLine($"カード選択完了: {selectedCard.Id} - cards.txtは更新されません");
             }
         }
 
         protected override async void OnDisappearing()
         {
             base.OnDisappearing();
-            // 画面を離れる時に保存
+            // 画面を離れる時に保存（内容が変更されている場合のみ）
             if (isDirty && !string.IsNullOrEmpty(editCardId))
             {
+                Debug.WriteLine($"画面離脱時: 内容が変更されているため保存を実行 - cardId: {editCardId}");
                 await SaveCurrentCard();
+            }
+            else
+            {
+                Debug.WriteLine($"画面離脱時: 内容に変更がないため保存をスキップ - cardId: {editCardId}, isDirty: {isDirty}");
             }
             
             // リソース解放
@@ -479,11 +611,24 @@ namespace Flashnote
             }
         }
 
-        private void LoadCardData(string cardId)
+        private async Task LoadCardData(string cardId)
         {
             try
             {
                 Debug.WriteLine($"LoadCardData開始 - cardId: {cardId}");
+                
+                // カード読み込み中はTextChangedイベントを一時的に無効にする
+                FrontTextEditor.TextChanged -= OnTextChanged;
+                BackTextEditor.TextChanged -= OnTextChanged;
+                ChoiceQuestion.TextChanged -= OnChoiceQuestionTextChanged;
+                ChoiceQuestionExplanation.TextChanged -= OnChoiceExplanationTextChanged;
+                
+                // 既存の画像とデータをクリア
+                imageBitmap?.Dispose();
+                imageBitmap = null;
+                selectedImagePath = null;
+                selectionRects.Clear();
+                
                 var jsonPath = Path.Combine(tempExtractPath, "cards", $"{cardId}.json");
                 
                 if (File.Exists(jsonPath))
@@ -511,14 +656,6 @@ namespace Flashnote
                         ChoiceQuestion.Text = cardData.question ?? "";
                         ChoiceQuestionExplanation.Text = cardData.explanation ?? "";
                         
-                        // TextChangedイベントハンドラーを設定
-                        ChoiceQuestion.TextChanged -= OnChoiceQuestionTextChanged; // 重複を防ぐため一度削除
-                        ChoiceQuestion.TextChanged += OnChoiceQuestionTextChanged;
-                        ChoiceQuestionExplanation.TextChanged -= OnChoiceExplanationTextChanged;
-                        ChoiceQuestionExplanation.TextChanged += OnChoiceExplanationTextChanged;
-                        
-
-                        
                         Debug.WriteLine($"選択肢カードのプレビュー初期化: question='{cardData.question}', explanation='{cardData.explanation}'");
                         
                         // 選択肢を設定
@@ -536,9 +673,6 @@ namespace Flashnote
                                     AutoSize = EditorAutoSizeOption.TextChanges
                                 };
                                 
-                                // TextChangedイベントを追加
-                                editor.TextChanged += OnChoiceTextChanged;
-
                                 // ダークモード対応
                                 editor.SetAppThemeColor(Editor.BackgroundColorProperty, Colors.White, Color.FromArgb("#2D2D30"));
                                 editor.SetAppThemeColor(Editor.TextColorProperty, Colors.Black, Colors.White);
@@ -554,22 +688,180 @@ namespace Flashnote
                         FrontTextEditor.Text = cardData.front ?? "";
                         BackTextEditor.Text = cardData.back ?? "";
                         
-
-                        
                         Debug.WriteLine($"基本カードのプレビュー初期化: front='{cardData.front}', back='{cardData.back}'");
                     }
 
-                    // 画像穴埋めの場合、選択範囲を設定
-                    if (cardData.type == "画像穴埋め" && cardData.selectionRects != null)
+                    // 画像穴埋めの場合、画像と選択範囲を設定
+                    if (cardData.type == "画像穴埋め")
+                    {
+                        Debug.WriteLine($"画像穴埋めカード読み込み: imagePath='{cardData.imagePath}'");
+                        
+                        // 画像を読み込む
+                        string imageFileName = null;
+                        
+                        // 新形式: imagePathフィールドから取得
+                        if (!string.IsNullOrEmpty(cardData.imagePath))
+                        {
+                            imageFileName = cardData.imagePath;
+                            Debug.WriteLine($"新形式のimagePathから画像ファイル名を取得: {imageFileName}");
+                        }
+                        // 旧形式: frontフィールドから取得（後方互換性のため）
+                        else if (!string.IsNullOrEmpty(cardData.front) && 
+                                 (cardData.front.StartsWith("img_") || cardData.front.EndsWith(".jpg") || cardData.front.EndsWith(".png")))
+                        {
+                            imageFileName = cardData.front;
+                            Debug.WriteLine($"旧形式のfrontフィールドから画像ファイル名を取得: {imageFileName}");
+                        }
+                        
+                        if (!string.IsNullOrEmpty(imageFileName))
+                        {
+                            // 画像パスを保存
+                            selectedImagePath = imageFileName;
+                            Debug.WriteLine($"使用する画像ファイル名: {selectedImagePath}");
+                            
+                            string imageFolder = Path.Combine(tempExtractPath, "img");
+                            string actualImagePath = null;
+                            
+                            // 複数の拡張子でファイルの存在を確認
+                            var possibleExtensions = new[] { ".jpg", ".jpeg", ".png", ".gif", ".bmp" };
+                            var baseFileName = Path.GetFileNameWithoutExtension(imageFileName);
+                            
+                            foreach (var ext in possibleExtensions)
+                            {
+                                var testPath = Path.Combine(imageFolder, baseFileName + ext);
+                                Debug.WriteLine($"拡張子 {ext} で確認: {testPath} - 存在: {File.Exists(testPath)}");
+                                
+                                if (File.Exists(testPath))
+                                {
+                                    actualImagePath = testPath;
+                                    selectedImagePath = Path.GetFileName(testPath);
+                                    Debug.WriteLine($"実際の画像ファイルを発見: {actualImagePath}");
+                                    break;
+                                }
+                            }
+                            
+                            if (actualImagePath != null)
+                            {
+                                try
+                                {
+                                    // 新しい画像を読み込み
+                                    using (var stream = File.OpenRead(actualImagePath))
+                                    {
+                                        var newBitmap = SKBitmap.Decode(stream);
+                                        
+                                        if (newBitmap != null)
+                                        {
+                                            // 既存の画像をクリアしてから新しい画像を設定
+                                            imageBitmap?.Dispose();
+                                            imageBitmap = newBitmap;
+                                            Debug.WriteLine($"画像読み込み成功: {imageBitmap.Width}x{imageBitmap.Height}");
+                                            
+                                            // キャンバスサイズを画像のアスペクト比に合わせて調整
+                                            AdjustCanvasSizeToImage();
+                                        }
+                                        else
+                                        {
+                                            Debug.WriteLine("画像のデコードに失敗しました");
+                                        }
+                                    }
+                                }
+                                catch (Exception ex)
+                                {
+                                    Debug.WriteLine($"画像読み込みエラー: {ex.Message}");
+                                }
+                            }
+                            else
+                            {
+                                Debug.WriteLine($"画像ファイルが見つかりません。確認したパス:");
+                                foreach (var ext in possibleExtensions)
+                                {
+                                    var testPath = Path.Combine(imageFolder, baseFileName + ext);
+                                    Debug.WriteLine($"  - {testPath}");
+                                }
+                            }
+                        }
+                        else
+                        {
+                            Debug.WriteLine("画像ファイル名が見つかりません");
+                        }
+                        
+                                                // 選択範囲を設定
+                        if (cardData.selectionRects != null)
                     {
                         selectionRects.Clear();
                         foreach (var rect in cardData.selectionRects)
                         {
-                            selectionRects.Add(new SKRect(rect.x, rect.y, rect.x + rect.width, rect.y + rect.height));
+                                // 既存のデータが正規化座標かどうかを判定
+                                // x, y, width, heightが全て0.0-1.0の範囲にある場合は正規化座標とみなす
+                                bool isNormalized = rect.x >= 0.0f && rect.x <= 1.0f && 
+                                                   rect.y >= 0.0f && rect.y <= 1.0f && 
+                                                   rect.width >= 0.0f && rect.width <= 1.0f && 
+                                                   rect.height >= 0.0f && rect.height <= 1.0f;
+                                
+                                SKRect selectionRect;
+                                if (isNormalized)
+                                {
+                                    // 正規化座標の場合は画像座標に変換
+                                    if (imageBitmap != null)
+                                    {
+                                        float imageX = rect.x * imageBitmap.Width;
+                                        float imageY = rect.y * imageBitmap.Height;
+                                        float imageWidth = rect.width * imageBitmap.Width;
+                                        float imageHeight = rect.height * imageBitmap.Height;
+                                        
+                                        selectionRect = new SKRect(imageX, imageY, imageX + imageWidth, imageY + imageHeight);
+                                        Debug.WriteLine($"正規化座標を画像座標に変換: 元={rect.x},{rect.y},{rect.width},{rect.height}, 画像サイズ={imageBitmap.Width}x{imageBitmap.Height} -> 画像座標={selectionRect}");
+                                    }
+                                    else
+                                    {
+                                        // 画像が読み込まれていない場合は仮のサイズで計算
+                                        float imageX = rect.x * 1000.0f;
+                                        float imageY = rect.y * 1000.0f;
+                                        float imageWidth = rect.width * 1000.0f;
+                                        float imageHeight = rect.height * 1000.0f;
+                                        
+                                        selectionRect = new SKRect(imageX, imageY, imageX + imageWidth, imageY + imageHeight);
+                                        Debug.WriteLine($"正規化座標を画像座標に変換（仮サイズ）: 元={rect.x},{rect.y},{rect.width},{rect.height} -> 画像座標={selectionRect}");
+                                    }
+                                }
+                                else
+                                {
+                                    // 既に画像座標の場合
+                                    selectionRect = new SKRect(rect.x, rect.y, rect.x + rect.width, rect.y + rect.height);
+                                    Debug.WriteLine($"画像座標として読み込み: {selectionRect}");
+                                }
+                                
+                                selectionRects.Add(selectionRect);
+                            }
+                            Debug.WriteLine($"選択範囲設定完了: {selectionRects.Count}個");
                         }
+                        
+                        // キャンバスを再描画
+                        CanvasView.InvalidateSurface();
+                        Debug.WriteLine("画像穴埋めカードの読み込みとキャンバス更新完了");
                     }
                 }
-                Debug.WriteLine("LoadCardData完了");
+                
+                // カード読み込み完了後、TextChangedイベントを再度有効にする
+                FrontTextEditor.TextChanged += OnTextChanged;
+                BackTextEditor.TextChanged += OnTextChanged;
+                ChoiceQuestion.TextChanged += OnChoiceQuestionTextChanged;
+                ChoiceQuestionExplanation.TextChanged += OnChoiceExplanationTextChanged;
+                
+                // 選択肢エディターのTextChangedイベントも設定
+                foreach (var stack in ChoicesContainer.Children.OfType<StackLayout>())
+                {
+                    var editor = stack.Children.OfType<Editor>().FirstOrDefault();
+                    if (editor != null)
+                    {
+                        editor.TextChanged += OnChoiceTextChanged;
+                    }
+                }
+                
+                // TextChangedイベント再設定後に少し待ってからisDirtyフラグをリセット
+                await Task.Delay(100);
+                isDirty = false;
+                Debug.WriteLine("LoadCardData完了 - TextChangedイベントを再設定し、isDirtyフラグをリセットしました");
             }
             catch (Exception ex)
             {
@@ -588,6 +880,7 @@ namespace Flashnote
             public string explanation { get; set; }
             public List<ChoiceData> choices { get; set; }
             public List<SelectionRect> selectionRects { get; set; }
+            public string imagePath { get; set; }  // 画像穴埋め用の画像パス
         }
 
         private class ChoiceData
@@ -616,14 +909,36 @@ namespace Flashnote
         private void OnCanvasViewPaintSurface(object sender, SKPaintSurfaceEventArgs e)
         {
             var canvas = e.Surface.Canvas;
-            canvas.Clear(SKColors.White);
+            var info = e.Info;
+            
+            // ダークモード対応の背景色
+            var backgroundColor = Application.Current?.RequestedTheme == AppTheme.Dark ? SKColors.Black : SKColors.White;
+            canvas.Clear(backgroundColor);
 
             if (imageBitmap != null)
             {
-                var rect = new SKRect(0, 0, e.Info.Width, e.Info.Height);
-                canvas.DrawBitmap(imageBitmap, rect);
+                Debug.WriteLine($"画像描画開始 - 画像サイズ: {imageBitmap.Width}x{imageBitmap.Height}, キャンバスサイズ: {info.Width}x{info.Height}");
+                
+                // キャンバスサイズは既に画像のアスペクト比に合わせて調整されているので、
+                // 画像をキャンバス全体に表示
+                var imageRect = new SKRect(0, 0, info.Width, info.Height);
+                
+                // 高品質描画用のペイントを設定
+                using (var paint = new SKPaint())
+                {
+                    paint.IsAntialias = true;
+                    paint.FilterQuality = SKFilterQuality.High;
+                    canvas.DrawBitmap(imageBitmap, imageRect, paint);
+                }
+                
+                Debug.WriteLine($"画像描画完了 - キャンバス全体に表示");
+            }
+            else
+            {
+                Debug.WriteLine("描画する画像がありません");
             }
 
+            // 選択範囲を描画
             using (var paint = new SKPaint
             {
                 Color = SKColors.Red,
@@ -631,9 +946,18 @@ namespace Flashnote
                 StrokeWidth = 3
             })
             {
-                foreach (var rect in selectionRects)
+                Debug.WriteLine($"選択範囲描画開始: {selectionRects.Count}個の選択範囲");
+                
+                // 画像座標をキャンバス座標に変換して描画
+                // キャンバスの実際のサイズを使用
+                float canvasWidth = info.Width;
+                float canvasHeight = info.Height;
+                
+                foreach (var imageRect in selectionRects)
                 {
-                    canvas.DrawRect(rect, paint);
+                    var canvasRect = ImageToCanvasRect(imageRect, canvasWidth, canvasHeight);
+                    Debug.WriteLine($"選択範囲描画: 画像座標={imageRect}, キャンバス={canvasRect}, キャンバスサイズ={canvasWidth}x{canvasHeight}");
+                    canvas.DrawRect(canvasRect, paint);
                 }
 
                 if (isDragging)
@@ -644,6 +968,7 @@ namespace Flashnote
                         Math.Abs(endPoint.X - startPoint.X),
                         Math.Abs(endPoint.Y - startPoint.Y)
                     );
+                    Debug.WriteLine($"ドラッグ中の選択範囲: {currentRect}");
                     canvas.DrawRect(currentRect, paint);
                 }
             }
@@ -658,10 +983,18 @@ namespace Flashnote
                 case SKTouchAction.Pressed:
                     if (e.MouseButton == SKMouseButton.Right)
                     {
-                        var clickedRect = selectionRects.FirstOrDefault(r => r.Contains(point));
+                        // キャンバスの実際のサイズを取得
+                        var canvasSize = CanvasView.CanvasSize;
+                        var clickedRect = selectionRects.FirstOrDefault(r => 
+                        {
+                            var actualRect = ImageToCanvasRect(r, canvasSize.Width, canvasSize.Height);
+                            return actualRect.Contains(point);
+                        });
+                        
                         if (clickedRect != SKRect.Empty)
                         {
-                            ShowContextMenu(point, clickedRect);
+                            var actualRect = ImageToCanvasRect(clickedRect, canvasSize.Width, canvasSize.Height);
+                            ShowContextMenu(point, actualRect);
                         }
                     }
                     else
@@ -682,17 +1015,21 @@ namespace Flashnote
                 case SKTouchAction.Released:
                     if (isDragging)
                     {
-                        var rect = SKRect.Create(
+                        var canvasRect = SKRect.Create(
                             Math.Min(startPoint.X, endPoint.X),
                             Math.Min(startPoint.Y, endPoint.Y),
                             Math.Abs(endPoint.X - startPoint.X),
                             Math.Abs(endPoint.Y - startPoint.Y)
                         );
 
-                        if (!rect.IsEmpty && rect.Width > 5 && rect.Height > 5)
+                        if (!canvasRect.IsEmpty && canvasRect.Width > 5 && canvasRect.Height > 5)
                         {
-                            selectionRects.Add(rect);
-                            isDirty = true;
+                                                    // キャンバス座標を画像座標に変換して保存
+                        var canvasSize = CanvasView.CanvasSize;
+                        var imageRect = CanvasToImageRect(canvasRect, canvasSize.Width, canvasSize.Height);
+                        selectionRects.Add(imageRect);
+                        isDirty = true;
+                        Debug.WriteLine($"選択範囲追加: キャンバス座標={canvasRect}, キャンバスサイズ={canvasSize.Width}x{canvasSize.Height}, 画像座標={imageRect}");
                         }
                     }
                     isDragging = false;
@@ -708,9 +1045,24 @@ namespace Flashnote
 
             if (action == "削除")
             {
-                selectionRects.Remove(rect);
-                isDirty = true;
-                CanvasView.InvalidateSurface();
+                // キャンバス座標を画像座標に変換して比較
+                var canvasSize = CanvasView.CanvasSize;
+                var imageRect = CanvasToImageRect(rect, canvasSize.Width, canvasSize.Height);
+                
+                // 最も近い選択範囲を見つけて削除
+                var rectToRemove = selectionRects.FirstOrDefault(r => 
+                    Math.Abs(r.Left - imageRect.Left) < 1.0f &&
+                    Math.Abs(r.Top - imageRect.Top) < 1.0f &&
+                    Math.Abs(r.Width - imageRect.Width) < 1.0f &&
+                    Math.Abs(r.Height - imageRect.Height) < 1.0f);
+                
+                if (rectToRemove != SKRect.Empty)
+                {
+                    selectionRects.Remove(rectToRemove);
+                    isDirty = true;
+                    CanvasView.InvalidateSurface();
+                    Debug.WriteLine($"選択範囲削除: {rectToRemove}");
+                }
             }
         }
 
@@ -867,6 +1219,7 @@ namespace Flashnote
                 }
             }
 
+            Debug.WriteLine($"OnChoiceTextChanged: isDirtyをtrueに設定");
             isDirty = true;
             autoSaveTimer.Stop();
             autoSaveTimer.Start();
@@ -884,38 +1237,48 @@ namespace Flashnote
             {
                 try
                 {
+                    Debug.WriteLine($"画像選択: {result.FullPath}");
+                    
+                    // 既存の画像をクリア
+                    imageBitmap?.Dispose();
+                    imageBitmap = null;
+                    
                     // 画像を読み込む
                     using (var stream = File.OpenRead(result.FullPath))
                     {
                         imageBitmap = SKBitmap.Decode(stream);
                     }
 
-                    // 画像のサイズを調整
                     if (imageBitmap != null)
                     {
-                        // キャンバスのサイズに合わせて画像をリサイズ
-                        var info = CanvasView.CanvasSize;
-                        var scale = Math.Min(info.Width / imageBitmap.Width, info.Height / imageBitmap.Height);
-                        var scaledWidth = imageBitmap.Width * scale;
-                        var scaledHeight = imageBitmap.Height * scale;
-
-                        var resizedBitmap = imageBitmap.Resize(
-                            new SKImageInfo((int)scaledWidth, (int)scaledHeight),
-                            SKFilterQuality.High
-                        );
-
-                        imageBitmap.Dispose();
-                        imageBitmap = resizedBitmap;
-
+                        Debug.WriteLine($"画像読み込み成功: {imageBitmap.Width}x{imageBitmap.Height}");
+                        
+                        // 画像パスを保存
+                        selectedImagePath = Path.GetFileName(result.FullPath);
+                        Debug.WriteLine($"保存された画像パス: {selectedImagePath}");
+                        
+                        // キャンバスサイズを画像のアスペクト比に合わせて調整
+                        AdjustCanvasSizeToImage();
+                        
                         // 選択範囲をクリア
                         selectionRects.Clear();
                         isDirty = true;
+                        
+                        // キャンバスを再描画
                         CanvasView.InvalidateSurface();
+                        
+                        Debug.WriteLine("画像選択完了");
+                    }
+                    else
+                    {
+                        Debug.WriteLine("画像のデコードに失敗しました");
+                        await DisplayAlert("エラー", "画像の読み込みに失敗しました。", "OK");
                     }
                 }
                 catch (Exception ex)
                 {
                     Debug.WriteLine($"画像の読み込みでエラー: {ex.Message}");
+                    Debug.WriteLine($"スタックトレース: {ex.StackTrace}");
                     await DisplayAlert("エラー", "画像の読み込みに失敗しました。", "OK");
                 }
             }
@@ -923,6 +1286,7 @@ namespace Flashnote
 
         private void OnChoiceQuestionTextChanged(object sender, TextChangedEventArgs e)
         {
+            Debug.WriteLine($"OnChoiceQuestionTextChanged: isDirtyをtrueに設定");
             isDirty = true;
             autoSaveTimer.Stop();
             autoSaveTimer.Start();
@@ -933,6 +1297,7 @@ namespace Flashnote
 
         private void OnChoiceExplanationTextChanged(object sender, TextChangedEventArgs e)
         {
+            Debug.WriteLine($"OnChoiceExplanationTextChanged: isDirtyをtrueに設定");
             isDirty = true;
             autoSaveTimer.Stop();
             autoSaveTimer.Start();
@@ -1218,6 +1583,7 @@ namespace Flashnote
             selectionRects.Clear();
             imageBitmap?.Dispose();
             imageBitmap = null;
+            selectedImagePath = null;
             CanvasView.InvalidateSurface();
 
             // カードタイプをリセット

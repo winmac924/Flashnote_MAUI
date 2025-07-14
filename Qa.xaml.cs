@@ -31,7 +31,7 @@ namespace Flashnote
         private Services.LearningResultSyncService _learningResultSyncService;
         // クラスの先頭で変数を宣言
         private string selectedImagePath = "";
-        private List<SKRect> selectionRects = new List<SKRect>();
+        private List<SKRect> selectionRects = new List<SKRect>();  // 画像座標（ピクセル単位）
         // 各問題ごとの正解・不正解回数を管理
         private Dictionary<int, CardResult> results = new Dictionary<int, CardResult>();
         private Dictionary<string, LearningRecord> learningRecords = new Dictionary<string, LearningRecord>();
@@ -594,10 +594,31 @@ namespace Flashnote
                 return;
             }
 
-            // 範囲の追加
+            // 範囲の追加（画像座標で保存）
             foreach (var line in card.selectionRects)
+            {
+                // 既存のデータが正規化座標かどうかを判定
+                // x, y, width, heightが全て0.0-1.0の範囲にある場合は正規化座標とみなす
+                bool isNormalized = line.x >= 0.0f && line.x <= 1.0f && 
+                                   line.y >= 0.0f && line.y <= 1.0f && 
+                                   line.width >= 0.0f && line.width <= 1.0f && 
+                                   line.height >= 0.0f && line.height <= 1.0f;
+                
+                SKRect selectionRect;
+                if (isNormalized)
                 {
-                selectionRects.Add(new SKRect(line.x, line.y, line.x + line.width, line.y + line.height));
+                    // 正規化座標の場合は画像座標に変換
+                    // 画像サイズは後で取得するため、一時的に0.0-1.0のまま保存
+                    selectionRect = new SKRect(line.x, line.y, line.x + line.width, line.y + line.height);
+                    Debug.WriteLine($"正規化座標を検出: {selectionRect}");
+                }
+                else
+                {
+                    // 画像座標の場合はそのまま使用
+                    selectionRect = new SKRect(line.x, line.y, line.x + line.width, line.y + line.height);
+                    Debug.WriteLine($"画像座標を検出: {selectionRect}");
+                }
+                selectionRects.Add(selectionRect);
             }
 
             CanvasView.InvalidateSurface();
@@ -685,20 +706,39 @@ namespace Flashnote
                     Debug.WriteLine($"描画領域: {imageRect.Left}, {imageRect.Top}, {imageRect.Right}, {imageRect.Bottom}");
                     Debug.WriteLine($"スケール: {scale}");
 
-                    // 正規化座標を実際の座標に変換して範囲を表示
-                    foreach (var normalizedRect in selectionRects)
+                    // 画像座標をキャンバス座標に変換して範囲を表示
+                    foreach (var selectionRect in selectionRects)
                     {
-                        // 正規化座標を実際の画像座標に変換
-                        float actualX = normalizedRect.Left * bitmap.Width;
-                        float actualY = normalizedRect.Top * bitmap.Height;
-                        float actualWidth = normalizedRect.Width * bitmap.Width;
-                        float actualHeight = normalizedRect.Height * bitmap.Height;
+                        // 既存のデータが正規化座標かどうかを判定
+                        bool isNormalized = selectionRect.Left >= 0.0f && selectionRect.Left <= 1.0f && 
+                                           selectionRect.Top >= 0.0f && selectionRect.Top <= 1.0f && 
+                                           selectionRect.Width >= 0.0f && selectionRect.Width <= 1.0f && 
+                                           selectionRect.Height >= 0.0f && selectionRect.Height <= 1.0f;
+                        
+                        SKRect actualImageRect;
+                        if (isNormalized)
+                        {
+                            // 正規化座標の場合は画像座標に変換
+                            actualImageRect = new SKRect(
+                                selectionRect.Left * bitmap.Width,
+                                selectionRect.Top * bitmap.Height,
+                                (selectionRect.Left + selectionRect.Width) * bitmap.Width,
+                                (selectionRect.Top + selectionRect.Height) * bitmap.Height
+                            );
+                            Debug.WriteLine($"正規化座標を画像座標に変換: {selectionRect} → {actualImageRect}");
+                        }
+                        else
+                        {
+                            // 画像座標の場合はそのまま使用
+                            actualImageRect = selectionRect;
+                            Debug.WriteLine($"画像座標を使用: {actualImageRect}");
+                        }
                         
                         // 画像座標をキャンバス座標に変換
-                        float canvasX = imageRect.Left + (actualX * scale);
-                        float canvasY = imageRect.Top + (actualY * scale);
-                        float canvasWidth = actualWidth * scale;
-                        float canvasHeight = actualHeight * scale;
+                        float canvasX = imageRect.Left + (actualImageRect.Left * scale);
+                        float canvasY = imageRect.Top + (actualImageRect.Top * scale);
+                        float canvasWidth = actualImageRect.Width * scale;
+                        float canvasHeight = actualImageRect.Height * scale;
                         
                         var displayRect = new SKRect(canvasX, canvasY, canvasX + canvasWidth, canvasY + canvasHeight);
                         
@@ -727,7 +767,7 @@ namespace Flashnote
                             canvas.DrawRect(displayRect, borderPaint);
                         }
 
-                        Debug.WriteLine($"正規化座標: {normalizedRect.Left:F3}, {normalizedRect.Top:F3}, {normalizedRect.Width:F3}, {normalizedRect.Height:F3}");
+                        Debug.WriteLine($"画像座標: {actualImageRect.Left:F1}, {actualImageRect.Top:F1}, {actualImageRect.Width:F1}, {actualImageRect.Height:F1}");
                         Debug.WriteLine($"表示座標: {displayRect.Left:F1}, {displayRect.Top:F1}, {displayRect.Right:F1}, {displayRect.Bottom:F1}");
                     }
                 }
