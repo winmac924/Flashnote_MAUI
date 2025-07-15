@@ -25,7 +25,13 @@ namespace Flashnote
         private string selectedImagePath;     // 選択された画像のパス
         private SKPoint startPoint, endPoint;
         private bool isDragging = false;
-        private const float HANDLE_SIZE = 15;
+        private bool isMoving = false;
+        private bool isResizing = false;
+        private int selectedRectIndex = -1;
+        private int resizeHandle = -1; // 0:左上, 1:右上, 2:左下, 3:右下
+        private SKPoint dragOffset;
+        private const float HANDLE_SIZE = 25; // ハンドルの表示サイズ
+        private const float HANDLE_HIT_SIZE = 35; // ハンドルのクリック判定サイズ（より大きい）
         private const float MAX_CANVAS_WIDTH = 600f;  // キャンバスの最大幅
         private const float MAX_CANVAS_HEIGHT = 800f; // キャンバスの最大高さ
 
@@ -939,11 +945,16 @@ namespace Flashnote
             }
 
             // 選択範囲を描画
-            using (var paint = new SKPaint
+            using (var strokePaint = new SKPaint
             {
                 Color = SKColors.Red,
                 Style = SKPaintStyle.Stroke,
                 StrokeWidth = 3
+            })
+            using (var fillPaint = new SKPaint
+            {
+                Color = new SKColor(255, 0, 0, 100), // 赤色、透明度77（約30%）
+                Style = SKPaintStyle.Fill
             })
             {
                 Debug.WriteLine($"選択範囲描画開始: {selectionRects.Count}個の選択範囲");
@@ -953,11 +964,19 @@ namespace Flashnote
                 float canvasWidth = info.Width;
                 float canvasHeight = info.Height;
                 
-                foreach (var imageRect in selectionRects)
+                for (int i = 0; i < selectionRects.Count; i++)
                 {
+                    var imageRect = selectionRects[i];
                     var canvasRect = ImageToCanvasRect(imageRect, canvasWidth, canvasHeight);
                     Debug.WriteLine($"選択範囲描画: 画像座標={imageRect}, キャンバス={canvasRect}, キャンバスサイズ={canvasWidth}x{canvasHeight}");
-                    canvas.DrawRect(canvasRect, paint);
+                    
+                    // 透明な塗りつぶし
+                    canvas.DrawRect(canvasRect, fillPaint);
+                    // 赤い枠線
+                    canvas.DrawRect(canvasRect, strokePaint);
+                    
+                    // すべての枠にハンドルを表示
+                    DrawResizeHandles(canvas, canvasRect);
                 }
 
                 if (isDragging)
@@ -969,44 +988,203 @@ namespace Flashnote
                         Math.Abs(endPoint.Y - startPoint.Y)
                     );
                     Debug.WriteLine($"ドラッグ中の選択範囲: {currentRect}");
-                    canvas.DrawRect(currentRect, paint);
+                    
+                    // 新しい枠の描画（透明な塗りつぶし + 赤い枠線）
+                    canvas.DrawRect(currentRect, fillPaint);
+                    canvas.DrawRect(currentRect, strokePaint);
                 }
             }
+        }
+
+        /// <summary>
+        /// リサイズハンドルを描画
+        /// </summary>
+        private void DrawResizeHandles(SKCanvas canvas, SKRect rect)
+        {
+            using (var paint = new SKPaint
+            {
+                Color = SKColors.Blue,
+                Style = SKPaintStyle.Fill
+            })
+            {
+                // ハンドルを枠の内側に配置（枠の端から5ピクセル内側）
+                float handleOffset = 5;
+                float handleSize = HANDLE_SIZE;
+                
+                // 左上ハンドル
+                canvas.DrawRect(new SKRect(rect.Left + handleOffset, rect.Top + handleOffset, rect.Left + handleOffset + handleSize, rect.Top + handleOffset + handleSize), paint);
+                
+                // 右上ハンドル
+                canvas.DrawRect(new SKRect(rect.Right - handleOffset - handleSize, rect.Top + handleOffset, rect.Right - handleOffset, rect.Top + handleOffset + handleSize), paint);
+                
+                // 左下ハンドル
+                canvas.DrawRect(new SKRect(rect.Left + handleOffset, rect.Bottom - handleOffset - handleSize, rect.Left + handleOffset + handleSize, rect.Bottom - handleOffset), paint);
+                
+                // 右下ハンドル
+                canvas.DrawRect(new SKRect(rect.Right - handleOffset - handleSize, rect.Bottom - handleOffset - handleSize, rect.Right - handleOffset, rect.Bottom - handleOffset), paint);
+            }
+        }
+
+        /// <summary>
+        /// 指定されたポイントにある枠のインデックスを取得
+        /// </summary>
+        private int FindRectAtPoint(SKPoint point, float canvasWidth, float canvasHeight)
+        {
+            for (int i = 0; i < selectionRects.Count; i++)
+            {
+                var canvasRect = ImageToCanvasRect(selectionRects[i], canvasWidth, canvasHeight);
+                if (canvasRect.Contains(point))
+                {
+                    return i;
+                }
+            }
+            return -1;
+        }
+
+        /// <summary>
+        /// 指定されたポイントにあるハンドルのインデックスを取得
+        /// </summary>
+        private int FindHandleAtPoint(SKPoint point, float canvasWidth, float canvasHeight)
+        {
+            if (selectedRectIndex < 0 || selectedRectIndex >= selectionRects.Count)
+                return -1;
+
+            var canvasRect = ImageToCanvasRect(selectionRects[selectedRectIndex], canvasWidth, canvasHeight);
+            
+            // ハンドルを枠の内側に配置（枠の端から5ピクセル内側）
+            float handleOffset = 5;
+            float handleHitSize = HANDLE_HIT_SIZE;
+            
+            // 各ハンドルの位置をチェック（クリック判定用の大きいサイズ）
+            var handles = new[]
+            {
+                new SKRect(canvasRect.Left + handleOffset, canvasRect.Top + handleOffset, canvasRect.Left + handleOffset + handleHitSize, canvasRect.Top + handleOffset + handleHitSize), // 左上
+                new SKRect(canvasRect.Right - handleOffset - handleHitSize, canvasRect.Top + handleOffset, canvasRect.Right - handleOffset, canvasRect.Top + handleOffset + handleHitSize), // 右上
+                new SKRect(canvasRect.Left + handleOffset, canvasRect.Bottom - handleOffset - handleHitSize, canvasRect.Left + handleOffset + handleHitSize, canvasRect.Bottom - handleOffset), // 左下
+                new SKRect(canvasRect.Right - handleOffset - handleHitSize, canvasRect.Bottom - handleOffset - handleHitSize, canvasRect.Right - handleOffset, canvasRect.Bottom - handleOffset)  // 右下
+            };
+
+            for (int i = 0; i < handles.Length; i++)
+            {
+                if (handles[i].Contains(point))
+                {
+                    return i;
+                }
+            }
+            return -1;
         }
 
         private void OnCanvasTouch(object sender, SKTouchEventArgs e)
         {
             var point = e.Location;
+            var canvasSize = CanvasView.CanvasSize;
 
             switch (e.ActionType)
             {
                 case SKTouchAction.Pressed:
                     if (e.MouseButton == SKMouseButton.Right)
                     {
-                        // キャンバスの実際のサイズを取得
-                        var canvasSize = CanvasView.CanvasSize;
-                        var clickedRect = selectionRects.FirstOrDefault(r => 
+                        // 右クリックで削除メニュー表示
+                        var clickedRectIndex = FindRectAtPoint(point, canvasSize.Width, canvasSize.Height);
+                        if (clickedRectIndex >= 0)
                         {
-                            var actualRect = ImageToCanvasRect(r, canvasSize.Width, canvasSize.Height);
-                            return actualRect.Contains(point);
-                        });
-                        
-                        if (clickedRect != SKRect.Empty)
-                        {
-                            var actualRect = ImageToCanvasRect(clickedRect, canvasSize.Width, canvasSize.Height);
+                            var actualRect = ImageToCanvasRect(selectionRects[clickedRectIndex], canvasSize.Width, canvasSize.Height);
                             ShowContextMenu(point, actualRect);
                         }
                     }
                     else
                     {
-                        isDragging = true;
-                        startPoint = point;
-                        endPoint = point;
+                        // 左クリックで既存の枠を選択または新しい枠を作成
+                        var rectIndex = FindRectAtPoint(point, canvasSize.Width, canvasSize.Height);
+                        
+                        if (rectIndex >= 0)
+                        {
+                            // 既存の枠を選択
+                            selectedRectIndex = rectIndex;
+                            
+                            // ハンドルがクリックされたかチェック
+                            var handleIndex = FindHandleAtPoint(point, canvasSize.Width, canvasSize.Height);
+                            if (handleIndex >= 0)
+                            {
+                                // リサイズモード
+                                isResizing = true;
+                                resizeHandle = handleIndex;
+                                Debug.WriteLine($"リサイズ開始: ハンドル={handleIndex}");
+                            }
+                            else
+                            {
+                                // 移動モード
+                                isMoving = true;
+                                var canvasRect = ImageToCanvasRect(selectionRects[rectIndex], canvasSize.Width, canvasSize.Height);
+                                dragOffset = new SKPoint(point.X - canvasRect.Left, point.Y - canvasRect.Top);
+                                Debug.WriteLine($"既存の枠を選択: インデックス={rectIndex}");
+                            }
+                        }
+                        else
+                        {
+                            // 新しい枠を作成
+                            isDragging = true;
+                            selectedRectIndex = -1;
+                            startPoint = point;
+                            endPoint = point;
+                            Debug.WriteLine("新しい枠を作成開始");
+                        }
                     }
                     break;
 
                 case SKTouchAction.Moved:
-                    if (isDragging)
+                    if (isMoving && selectedRectIndex >= 0)
+                    {
+                        // 既存の枠を移動（サイズは保持）
+                        var newLeft = point.X - dragOffset.X;
+                        var newTop = point.Y - dragOffset.Y;
+                        
+                        // 現在のキャンバス座標のサイズを取得
+                        var currentCanvasRect = ImageToCanvasRect(selectionRects[selectedRectIndex], canvasSize.Width, canvasSize.Height);
+                        
+                        // キャンバス境界内に制限（キャンバス座標のサイズを使用）
+                        newLeft = Math.Max(0, Math.Min(newLeft, canvasSize.Width - currentCanvasRect.Width));
+                        newTop = Math.Max(0, Math.Min(newTop, canvasSize.Height - currentCanvasRect.Height));
+                        
+                        var newCanvasRect = new SKRect(newLeft, newTop, newLeft + currentCanvasRect.Width, newTop + currentCanvasRect.Height);
+                        var newImageRect = CanvasToImageRect(newCanvasRect, canvasSize.Width, canvasSize.Height);
+                        
+                        selectionRects[selectedRectIndex] = newImageRect;
+                        isDirty = true;
+                        Debug.WriteLine($"枠を移動: 新しい位置={newImageRect}, サイズ={newImageRect.Width}x{newImageRect.Height}");
+                    }
+                    else if (isResizing && selectedRectIndex >= 0)
+                    {
+                        // 既存の枠をリサイズ
+                        var currentCanvasRect = ImageToCanvasRect(selectionRects[selectedRectIndex], canvasSize.Width, canvasSize.Height);
+                        var newCanvasRect = currentCanvasRect;
+                        
+                        switch (resizeHandle)
+                        {
+                            case 0: // 左上 - 右下を固定
+                                newCanvasRect.Left = Math.Max(0, Math.Min(point.X, currentCanvasRect.Right - 10));
+                                newCanvasRect.Top = Math.Max(0, Math.Min(point.Y, currentCanvasRect.Bottom - 10));
+                                break;
+                            case 1: // 右上 - 左下を固定
+                                newCanvasRect.Right = Math.Max(currentCanvasRect.Left + 10, Math.Min(point.X, canvasSize.Width));
+                                newCanvasRect.Top = Math.Max(0, Math.Min(point.Y, currentCanvasRect.Bottom - 10));
+                                break;
+                            case 2: // 左下 - 右上を固定
+                                newCanvasRect.Left = Math.Max(0, Math.Min(point.X, currentCanvasRect.Right - 10));
+                                newCanvasRect.Bottom = Math.Max(currentCanvasRect.Top + 10, Math.Min(point.Y, canvasSize.Height));
+                                break;
+                            case 3: // 右下 - 左上を固定
+                                newCanvasRect.Right = Math.Max(currentCanvasRect.Left + 10, Math.Min(point.X, canvasSize.Width));
+                                newCanvasRect.Bottom = Math.Max(currentCanvasRect.Top + 10, Math.Min(point.Y, canvasSize.Height));
+                                break;
+                        }
+                        
+                        var newImageRect = CanvasToImageRect(newCanvasRect, canvasSize.Width, canvasSize.Height);
+                        selectionRects[selectedRectIndex] = newImageRect;
+                        isDirty = true;
+                        Debug.WriteLine($"枠をリサイズ: ハンドル={resizeHandle}, 新しいサイズ={newImageRect.Width}x{newImageRect.Height}");
+                    }
+                    else if (isDragging)
                     {
                         endPoint = point;
                     }
@@ -1024,15 +1202,38 @@ namespace Flashnote
 
                         if (!canvasRect.IsEmpty && canvasRect.Width > 5 && canvasRect.Height > 5)
                         {
-                                                    // キャンバス座標を画像座標に変換して保存
-                        var canvasSize = CanvasView.CanvasSize;
-                        var imageRect = CanvasToImageRect(canvasRect, canvasSize.Width, canvasSize.Height);
-                        selectionRects.Add(imageRect);
-                        isDirty = true;
-                        Debug.WriteLine($"選択範囲追加: キャンバス座標={canvasRect}, キャンバスサイズ={canvasSize.Width}x{canvasSize.Height}, 画像座標={imageRect}");
+                            // 重複チェック
+                            var imageRect = CanvasToImageRect(canvasRect, canvasSize.Width, canvasSize.Height);
+                            bool isOverlapping = selectionRects.Any(existingRect => 
+                            {
+                                var existingCanvasRect = ImageToCanvasRect(existingRect, canvasSize.Width, canvasSize.Height);
+                                return canvasRect.IntersectsWith(existingCanvasRect);
+                            });
+                            
+                            if (!isOverlapping)
+                            {
+                                selectionRects.Add(imageRect);
+                                isDirty = true;
+                                Debug.WriteLine($"選択範囲追加: キャンバス座標={canvasRect}, 画像座標={imageRect}");
+                            }
+                            else
+                            {
+                                Debug.WriteLine("重複するため新しい枠を作成しませんでした");
+                            }
                         }
+                        isDragging = false;
                     }
-                    isDragging = false;
+                    else if (isMoving)
+                    {
+                        isMoving = false;
+                        Debug.WriteLine("枠の移動完了");
+                    }
+                    else if (isResizing)
+                    {
+                        isResizing = false;
+                        resizeHandle = -1;
+                        Debug.WriteLine("枠のリサイズ完了");
+                    }
                     break;
             }
 
@@ -1045,23 +1246,29 @@ namespace Flashnote
 
             if (action == "削除")
             {
-                // キャンバス座標を画像座標に変換して比較
+                // ポイントから枠のインデックスを取得
                 var canvasSize = CanvasView.CanvasSize;
-                var imageRect = CanvasToImageRect(rect, canvasSize.Width, canvasSize.Height);
+                var rectIndex = FindRectAtPoint(point, canvasSize.Width, canvasSize.Height);
                 
-                // 最も近い選択範囲を見つけて削除
-                var rectToRemove = selectionRects.FirstOrDefault(r => 
-                    Math.Abs(r.Left - imageRect.Left) < 1.0f &&
-                    Math.Abs(r.Top - imageRect.Top) < 1.0f &&
-                    Math.Abs(r.Width - imageRect.Width) < 1.0f &&
-                    Math.Abs(r.Height - imageRect.Height) < 1.0f);
-                
-                if (rectToRemove != SKRect.Empty)
+                if (rectIndex >= 0)
                 {
-                    selectionRects.Remove(rectToRemove);
+                    var rectToRemove = selectionRects[rectIndex];
+                    selectionRects.RemoveAt(rectIndex);
+                    
+                    // 選択中の枠が削除された場合は選択をクリア
+                    if (rectIndex == selectedRectIndex)
+                    {
+                        selectedRectIndex = -1;
+                    }
+                    else if (rectIndex < selectedRectIndex)
+                    {
+                        // 選択中の枠より前の枠が削除された場合はインデックスを調整
+                        selectedRectIndex--;
+                    }
+                    
                     isDirty = true;
                     CanvasView.InvalidateSurface();
-                    Debug.WriteLine($"選択範囲削除: {rectToRemove}");
+                    Debug.WriteLine($"選択範囲削除: インデックス={rectIndex}, 枠={rectToRemove}");
                 }
             }
         }
@@ -1581,6 +1788,10 @@ namespace Flashnote
 
             // 画像穴埋めカード
             selectionRects.Clear();
+            selectedRectIndex = -1;
+            isMoving = false;
+            isResizing = false;
+            resizeHandle = -1;
             imageBitmap?.Dispose();
             imageBitmap = null;
             selectedImagePath = null;

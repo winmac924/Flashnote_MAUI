@@ -917,6 +917,7 @@ namespace Flashnote
             {
                 currentIndex++;
                 NextButton.IsVisible = false;
+                ShowAnswerButton.IsVisible = true;
                 Debug.WriteLine($"次の問題へ移動: {currentIndex + 1}/{cards.Count}");
                 await DisplayCard();
             }
