@@ -646,7 +646,7 @@ namespace Flashnote
             string newNoteName = await DisplayPromptAsync("新規ノート作成", "ノートの名前を入力してください");
             if (!string.IsNullOrWhiteSpace(newNoteName))
             {
-                SaveNewNote(newNoteName);
+                await SaveNewNoteAsync(newNoteName);
             }
         }
 
@@ -757,7 +757,7 @@ namespace Flashnote
                     return;
 
                 // インポート処理
-                var importer = new AnkiImporter();
+                var importer = new AnkiImporter(_blobStorageService);
                 var cards = await importer.ImportApkg(result.FullPath);
 
                 if (cards == null || cards.Count == 0)
@@ -790,15 +790,15 @@ namespace Flashnote
             }
         }
         // ノートを保存する
-        private void SaveNewNote(string noteName)
+        private async Task SaveNewNoteAsync(string noteName)
         {
             try
             {
                 Debug.WriteLine($"新規ノート作成開始: {noteName}");
-            var currentFolder = _currentPath.Peek();
+                var currentFolder = _currentPath.Peek();
                 Debug.WriteLine($"現在のフォルダ: {currentFolder}");
 
-            var filePath = Path.Combine(currentFolder, $"{noteName}.ankpls");
+                var filePath = Path.Combine(currentFolder, $"{noteName}.ankpls");
                 Debug.WriteLine($"作成するファイルのパス: {filePath}");
 
                 // 一時フォルダを作成
@@ -839,7 +839,77 @@ namespace Flashnote
                 _viewModel.Notes.Insert(0, newNote);
                 Debug.WriteLine($"ノートを追加しました: {noteName}");
 
-
+                // Blob Storageに即座にアップロード
+                try
+                {
+                    var uid = App.CurrentUser?.Uid;
+                    if (!string.IsNullOrEmpty(uid))
+                    {
+                        Debug.WriteLine($"Blob Storageへのアップロード開始: {noteName}");
+                        
+                        // サブフォルダを取得
+                        string subFolder = null;
+                        var documentsPath = Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments);
+                        var flashnotePath = Path.Combine(documentsPath, "Flashnote");
+                        
+                        if (currentFolder.StartsWith(flashnotePath, StringComparison.OrdinalIgnoreCase))
+                        {
+                            var relativePath = Path.GetRelativePath(flashnotePath, currentFolder);
+                            if (relativePath != ".")
+                            {
+                                subFolder = relativePath;
+                            }
+                        }
+                        
+                        Debug.WriteLine($"サブフォルダ: {subFolder ?? "ルート"}");
+                        
+                        // cards.txtをBlob Storageにアップロード
+                        var cardsContent = "0\n";
+                        await _blobStorageService.SaveNoteAsync(uid, noteName, cardsContent, subFolder);
+                        Debug.WriteLine($"cards.txtをBlob Storageにアップロード完了: {noteName}");
+                        
+                        // 一時フォルダを正しい場所にコピー（同期処理で使用されるため）
+                        var correctTempFolder = Path.Combine(
+                            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+                            "Flashnote",
+                            subFolder ?? "",
+                            noteName + "_temp");
+                        
+                        if (Directory.Exists(correctTempFolder))
+                        {
+                            Directory.Delete(correctTempFolder, true);
+                        }
+                        
+                        // ディレクトリを作成
+                        Directory.CreateDirectory(Path.GetDirectoryName(correctTempFolder));
+                        
+                        // 一時フォルダの内容をコピー
+                        foreach (var file in Directory.GetFiles(tempFolder, "*", SearchOption.AllDirectories))
+                        {
+                            var relativePath = Path.GetRelativePath(tempFolder, file);
+                            var targetPath = Path.Combine(correctTempFolder, relativePath);
+                            var targetDir = Path.GetDirectoryName(targetPath);
+                            
+                            if (!Directory.Exists(targetDir))
+                            {
+                                Directory.CreateDirectory(targetDir);
+                            }
+                            
+                            File.Copy(file, targetPath, true);
+                        }
+                        
+                        Debug.WriteLine($"一時フォルダを正しい場所にコピー完了: {correctTempFolder}");
+                    }
+                    else
+                    {
+                        Debug.WriteLine("ユーザーIDが取得できないため、Blob Storageへのアップロードをスキップ");
+                    }
+                }
+                catch (Exception ex)
+                {
+                    Debug.WriteLine($"Blob Storageへのアップロード中にエラー: {ex.Message}");
+                    // アップロードに失敗してもローカルノートの作成は続行
+                }
 
                 // メインページを更新
                 LoadNotes();
@@ -850,6 +920,12 @@ namespace Flashnote
                 Debug.WriteLine($"新規ノート作成中にエラー: {ex.Message}");
                 throw;
             }
+        }
+
+        // ノートを保存する（同期版 - 後方互換性のため）
+        private void SaveNewNote(string noteName)
+        {
+            _ = SaveNewNoteAsync(noteName);
         }
 
         private void CreateNewFolder(string folderName)

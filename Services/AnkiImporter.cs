@@ -9,11 +9,19 @@ using Flashnote.Models;
 using System.Diagnostics;
 using SQLite;
 using System.Linq;
+using Flashnote;
 
 namespace Flashnote.Services
 {
     public class AnkiImporter
     {
+        private readonly BlobStorageService _blobStorageService;
+
+        public AnkiImporter(BlobStorageService blobStorageService = null)
+        {
+            _blobStorageService = blobStorageService;
+        }
+
         public async Task<List<CardData>> ImportApkg(string apkgFilePath)
         {
             var cards = new List<CardData>();
@@ -1115,6 +1123,54 @@ namespace Flashnote.Services
                     {
                         Debug.WriteLine($"  - {Path.GetRelativePath(tempExtractPath, file)}");
                     }
+                }
+
+                // Blob Storageに即座にアップロード
+                if (_blobStorageService != null)
+                {
+                    try
+                    {
+                        var uid = App.CurrentUser?.Uid;
+                        if (!string.IsNullOrEmpty(uid))
+                        {
+                            Debug.WriteLine($"Blob Storageへのアップロード開始: {noteName}");
+                            
+                            // cards.txtをBlob Storageにアップロード
+                            var cardsContent = await File.ReadAllTextAsync(cardsTxtPath);
+                            await _blobStorageService.SaveNoteAsync(uid, noteName, cardsContent, subFolder);
+                            Debug.WriteLine($"cards.txtをBlob Storageにアップロード完了: {noteName}");
+                            
+                            // 各カードのJSONファイルをBlob Storageにアップロード
+                            foreach (var card in cards)
+                            {
+                                var cardJsonPath = Path.Combine(cardsDir, $"{card.id}.json");
+                                if (File.Exists(cardJsonPath))
+                                {
+                                    var cardContent = await File.ReadAllTextAsync(cardJsonPath);
+                                    var uploadPath = string.IsNullOrEmpty(subFolder) 
+                                        ? $"{noteName}/cards" 
+                                        : $"{subFolder}/{noteName}/cards";
+                                    await _blobStorageService.SaveNoteAsync(uid, $"{card.id}.json", cardContent, uploadPath);
+                                    Debug.WriteLine($"カードファイルをBlob Storageにアップロード: {card.id}.json");
+                                }
+                            }
+                            
+                            Debug.WriteLine($"Blob Storageへのアップロード完了: {noteName}");
+                        }
+                        else
+                        {
+                            Debug.WriteLine("ユーザーIDが取得できないため、Blob Storageへのアップロードをスキップ");
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        Debug.WriteLine($"Blob Storageへのアップロード中にエラー: {ex.Message}");
+                        // アップロードに失敗してもローカルファイルの作成は続行
+                    }
+                }
+                else
+                {
+                    Debug.WriteLine("BlobStorageServiceが設定されていないため、Blob Storageへのアップロードをスキップ");
                 }
 
                 return ankplsPath;

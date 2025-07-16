@@ -426,7 +426,7 @@ namespace Flashnote
                 {
                     id = editCardId,
                     type = cardType,
-                    front = frontText,
+                    front = cardType == "画像穴埋め" ? selectedImagePath : frontText,  // 画像穴埋めの場合は画像ファイル名を保存
                     back = backText,
                     question = choiceQuestion,
                     explanation = choiceExplanation,
@@ -1460,8 +1460,32 @@ namespace Flashnote
                     {
                         Debug.WriteLine($"画像読み込み成功: {imageBitmap.Width}x{imageBitmap.Height}");
                         
+                        // iOS版に合わせて8桁_6桁の数字形式でIDを生成
+                        Random random = new Random();
+                        string imageId8 = random.Next(10000000, 99999999).ToString(); // 8桁の数字
+                        string imageId6 = random.Next(100000, 999999).ToString(); // 6桁の数字
+                        string imageId = $"{imageId8}_{imageId6}";
+
+                        // 画像を img フォルダに保存
+                        var imgFolderPath = Path.Combine(tempExtractPath, "img");
+                        if (!Directory.Exists(imgFolderPath))
+                        {
+                            Directory.CreateDirectory(imgFolderPath);
+                        }
+
+                        var imgFileName = $"img_{imageId}.jpg";
+                        var imgFilePath = Path.Combine(imgFolderPath, imgFileName);
+                        
+                        // 画像をJPEG形式で保存
+                        using (var image = SKImage.FromBitmap(imageBitmap))
+                        using (var data = image.Encode(SKEncodedImageFormat.Jpeg, 80)) // 品質を80%に設定
+                        using (var fileStream = File.Create(imgFilePath))
+                        {
+                            data.SaveTo(fileStream);
+                        }
+                        
                         // 画像パスを保存
-                        selectedImagePath = Path.GetFileName(result.FullPath);
+                        selectedImagePath = imgFileName;
                         Debug.WriteLine($"保存された画像パス: {selectedImagePath}");
                         
                         // キャンバスサイズを画像のアスペクト比に合わせて調整

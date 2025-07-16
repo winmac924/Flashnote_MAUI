@@ -17,6 +17,7 @@ namespace Flashnote.Models
         public string explanation { get; set; }
         public List<ChoiceData> choices { get; set; }
         public List<SelectionRect> selectionRects { get; set; }
+        public string imageFileName { get; set; } // 画像穴埋めカード用の画像ファイル名
     }
 
     public class ChoiceData
