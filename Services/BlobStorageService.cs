@@ -635,21 +635,25 @@ namespace Flashnote.Services
                     if (System.Text.RegularExpressions.Regex.IsMatch(imgFile, @"^img_\d{8}_\d{6}\.jpg$"))
                     {
                         Debug.WriteLine($"画像ファイル形式チェック OK: {imgFile}");
-                        var imgContent = await GetSharedNoteFileAsync(userId, $"{notePath}/img", imgFile);
-                        Debug.WriteLine($"画像ファイル取得結果 {imgFile}: {(imgContent != null ? "成功" : "失敗")}");
-                        if (imgContent != null)
+                        try
                         {
-                            try
+                            // バイナリデータとして直接取得
+                            var imgBytes = await GetImageBinaryAsync(userId, imgFile, $"{notePath}/img");
+                            Debug.WriteLine($"画像ファイル取得結果 {imgFile}: {(imgBytes != null ? "成功" : "失敗")}");
+                            if (imgBytes != null)
                             {
-                                var imgBytes = Convert.FromBase64String(imgContent);
                                 var imgPath = Path.Combine(imgDirPath, imgFile);
                                 await File.WriteAllBytesAsync(imgPath, imgBytes);
                                 Debug.WriteLine($"画像ファイルをダウンロード: {imgPath} ({imgBytes.Length} バイト)");
                             }
-                            catch (Exception ex)
+                            else
                             {
-                                Debug.WriteLine($"画像ファイルのダウンロード中にエラー: {imgFile}, エラー: {ex.Message}");
+                                Debug.WriteLine($"画像ファイルの取得に失敗: {imgFile}");
                             }
+                        }
+                        catch (Exception ex)
+                        {
+                            Debug.WriteLine($"画像ファイルのダウンロード中にエラー: {imgFile}, エラー: {ex.Message}");
                         }
                     }
                     else

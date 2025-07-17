@@ -858,20 +858,24 @@ namespace Flashnote.Services
                     {
                         if (Regex.IsMatch(imgFile, @"^img_\d{8}_\d{6}\.jpg$"))
                         {
-                            var imgContent = await _blobStorageService.GetSharedNoteFileAsync(originalUserId, $"{notePath}/img", imgFile);
-                            if (imgContent != null)
+                            try
                             {
-                                try
+                                // バイナリデータとして直接取得
+                                var imgBytes = await _blobStorageService.GetImageBinaryAsync(originalUserId, imgFile, $"{notePath}/img");
+                                if (imgBytes != null)
                                 {
-                                    var imgBytes = Convert.FromBase64String(imgContent);
                                     var imgPath = Path.Combine(imgDir, imgFile);
                                     await File.WriteAllBytesAsync(imgPath, imgBytes);
-                                    Debug.WriteLine($"画像ファイルをダウンロード: {imgFile}");
+                                    Debug.WriteLine($"画像ファイルをダウンロード: {imgFile} ({imgBytes.Length} バイト)");
                                 }
-                                catch (Exception ex)
+                                else
                                 {
-                                    Debug.WriteLine($"画像ファイル同期中にエラー: {imgFile}, エラー: {ex.Message}");
+                                    Debug.WriteLine($"画像ファイルの取得に失敗: {imgFile}");
                                 }
+                            }
+                            catch (Exception ex)
+                            {
+                                Debug.WriteLine($"画像ファイル同期中にエラー: {imgFile}, エラー: {ex.Message}");
                             }
                         }
                     }
@@ -1121,19 +1125,23 @@ namespace Flashnote.Services
                                 var imgPath = Path.Combine(imgDir, imgFile);
                                 if (!File.Exists(imgPath))
                                 {
-                                    var imgContent = await _blobStorageService.GetSharedNoteFileAsync(originalUserId, $"{notePath}/img", imgFile);
-                                    if (imgContent != null)
+                                    try
                                     {
-                                        try
+                                        // バイナリデータとして直接取得
+                                        var imgBytes = await _blobStorageService.GetImageBinaryAsync(originalUserId, imgFile, $"{notePath}/img");
+                                        if (imgBytes != null)
                                         {
-                                            var imgBytes = Convert.FromBase64String(imgContent);
                                             await File.WriteAllBytesAsync(imgPath, imgBytes);
-                                            Debug.WriteLine($"画像ファイルをダウンロード: {imgFile}");
+                                            Debug.WriteLine($"画像ファイルをダウンロード: {imgFile} ({imgBytes.Length} バイト)");
                                         }
-                                        catch (Exception ex)
+                                        else
                                         {
-                                            Debug.WriteLine($"画像ファイル同期中にエラー: {imgFile}, エラー: {ex.Message}");
+                                            Debug.WriteLine($"画像ファイルの取得に失敗: {imgFile}");
                                         }
+                                    }
+                                    catch (Exception ex)
+                                    {
+                                        Debug.WriteLine($"画像ファイル同期中にエラー: {imgFile}, エラー: {ex.Message}");
                                     }
                                 }
                             }

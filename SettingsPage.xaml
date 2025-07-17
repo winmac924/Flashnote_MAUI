@@ -215,6 +215,21 @@
                                VerticalOptions="Center"/>
                     </StackLayout>
                     
+                    <!-- テキスト入力モードのデフォルト設定 -->
+                    <StackLayout Orientation="Horizontal" 
+                                 HorizontalOptions="Fill"
+                                 VerticalOptions="Center">
+                        <Label Text="テキスト入力モードをデフォルトで有効にする" 
+                               FontSize="14" 
+                               TextColor="Black"
+                               VerticalOptions="Center"
+                               HorizontalOptions="StartAndExpand"/>
+                        <Switch x:Name="DefaultTextInputModeToggle" 
+                                IsToggled="False"
+                                Toggled="OnDefaultTextInputModeToggled"
+                                VerticalOptions="Center"/>
+                    </StackLayout>
+                    
                 </StackLayout>
             </Frame>
             

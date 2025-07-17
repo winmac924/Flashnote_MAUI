@@ -27,6 +27,14 @@ namespace Flashnote
             BindableProperty.Create(nameof(LineBreakMode), typeof(LineBreakMode), typeof(RichTextLabel), LineBreakMode.WordWrap,
                 propertyChanged: OnLineBreakModeChanged);
 
+        public static readonly BindableProperty TextInputModeProperty =
+            BindableProperty.Create(nameof(TextInputMode), typeof(bool), typeof(RichTextLabel), false,
+                propertyChanged: OnTextInputModeChanged);
+
+        public static readonly BindableProperty BlankAnswersProperty =
+            BindableProperty.Create(nameof(BlankAnswers), typeof(List<string>), typeof(RichTextLabel), null,
+                propertyChanged: OnBlankAnswersChanged);
+
         public string RichText
         {
             get => (string)GetValue(RichTextProperty);
@@ -55,6 +63,18 @@ namespace Flashnote
         {
             get => (LineBreakMode)GetValue(LineBreakModeProperty);
             set => SetValue(LineBreakModeProperty, value);
+        }
+
+        public bool TextInputMode
+        {
+            get => (bool)GetValue(TextInputModeProperty);
+            set => SetValue(TextInputModeProperty, value);
+        }
+
+        public List<string> BlankAnswers
+        {
+            get => (List<string>)GetValue(BlankAnswersProperty);
+            set => SetValue(BlankAnswersProperty, value);
         }
 
         private StackLayout _container;
@@ -119,6 +139,22 @@ namespace Flashnote
                 System.Diagnostics.Debug.WriteLine($"=== RichTextLabel OnImageFolderPathChanged ===");
                 System.Diagnostics.Debug.WriteLine($"oldValue: '{oldValue}'");
                 System.Diagnostics.Debug.WriteLine($"newValue: '{newValue}'");
+                label.ProcessRichText();
+            }
+        }
+
+        private static void OnTextInputModeChanged(BindableObject bindable, object oldValue, object newValue)
+        {
+            if (bindable is RichTextLabel label)
+            {
+                label.ProcessRichText();
+            }
+        }
+
+        private static void OnBlankAnswersChanged(BindableObject bindable, object oldValue, object newValue)
+        {
+            if (bindable is RichTextLabel label)
+            {
                 label.ProcessRichText();
             }
         }
@@ -375,14 +411,35 @@ namespace Flashnote
                 {
                     case "blank":
                         var blankText = minMatch.Groups[1].Value;
-                        formatted.Spans.Add(new Span { Text = "(", FontSize = FontSize });
-                        formatted.Spans.Add(new Span
+                        if (TextInputMode)
                         {
-                            Text = ShowAnswer ? blankText : "_____",
-                            FontSize = FontSize,
-                            TextColor = ShowAnswer ? Colors.Red : Colors.Gray
-                        });
-                        formatted.Spans.Add(new Span { Text = ")", FontSize = FontSize });
+                            // テキスト入力モード: 数字と正答を表示
+                            int blankNumber = GetBlankNumber(formatted);
+                            if (ShowAnswer)
+                            {
+                                // 解答表示時は正答も含める（正答部分を赤色で）
+                                formatted.Spans.Add(new Span { Text = $"({blankNumber}:", FontSize = FontSize });
+                                formatted.Spans.Add(new Span { Text = blankText, FontSize = FontSize, TextColor = Colors.Red });
+                                formatted.Spans.Add(new Span { Text = ")", FontSize = FontSize });
+                            }
+                            else
+                            {
+                                // 解答非表示時は数字のみ
+                                formatted.Spans.Add(new Span { Text = $"({blankNumber})", FontSize = FontSize });
+                            }
+                        }
+                        else
+                        {
+                            // 通常モード: 括弧と下線または正解を表示
+                            formatted.Spans.Add(new Span { Text = "(", FontSize = FontSize });
+                            formatted.Spans.Add(new Span
+                            {
+                                Text = ShowAnswer ? blankText : "_____",
+                                FontSize = FontSize,
+                                TextColor = ShowAnswer ? Colors.Red : Colors.Gray
+                            });
+                            formatted.Spans.Add(new Span { Text = ")", FontSize = FontSize });
+                        }
                         break;
                     case "color":
                         var colorText = minMatch.Groups[2].Value;
@@ -421,6 +478,20 @@ namespace Flashnote
                 }
                 idx = minMatch.Index + minMatch.Length;
             }
+        }
+
+        // blankの連番を取得するメソッド
+        private int GetBlankNumber(FormattedString formatted)
+        {
+            int count = 1;
+            foreach (var span in formatted.Spans)
+            {
+                if (span.Text != null && System.Text.RegularExpressions.Regex.IsMatch(span.Text, @"\(\d+\)"))
+                {
+                    count++;
+                }
+            }
+            return count;
         }
 
         private Color GetColorFromName(string colorName)

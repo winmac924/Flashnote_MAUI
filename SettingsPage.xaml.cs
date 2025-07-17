@@ -26,6 +26,7 @@ namespace Flashnote
             LoadAppVersion();
             UpdateLoginStatus();
             LoadImportedSharedKeys();
+            LoadDefaultTextInputModeSetting();
         }
 
         protected override async void OnAppearing()
@@ -34,6 +35,7 @@ namespace Flashnote
             await LoadSavedLoginInfo();
             UpdateLoginStatus();
             LoadImportedSharedKeys();
+            LoadDefaultTextInputModeSetting();
         }
 
         private async Task LoadSavedLoginInfo()
@@ -70,6 +72,36 @@ namespace Flashnote
             {
                 Debug.WriteLine($"アプリバージョンの取得中にエラー: {ex.Message}");
                 VersionLabel.Text = "不明";
+            }
+        }
+
+        private async void LoadDefaultTextInputModeSetting()
+        {
+            try
+            {
+                var defaultTextInputMode = await SecureStorage.GetAsync("default_text_input_mode");
+                bool isEnabled = defaultTextInputMode == "true";
+                DefaultTextInputModeToggle.IsToggled = isEnabled;
+                Debug.WriteLine($"デフォルトテキスト入力モード設定を読み込み: {isEnabled}");
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"デフォルトテキスト入力モード設定の読み込み中にエラー: {ex.Message}");
+                DefaultTextInputModeToggle.IsToggled = false;
+            }
+        }
+
+        private async void OnDefaultTextInputModeToggled(object sender, ToggledEventArgs e)
+        {
+            try
+            {
+                var value = e.Value ? "true" : "false";
+                await SecureStorage.SetAsync("default_text_input_mode", value);
+                Debug.WriteLine($"デフォルトテキスト入力モード設定を保存: {value}");
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"デフォルトテキスト入力モード設定の保存中にエラー: {ex.Message}");
             }
         }
 
