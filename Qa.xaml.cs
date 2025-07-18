@@ -501,6 +501,7 @@ namespace Flashnote
                     isTextInputMode = false;
                     FrontPreviewLabel.TextInputMode = false;
                     FrontPreviewLabel.BlankAnswers = null;
+                    showAnswer = false; // 解答表示状態をリセット
                     Debug.WriteLine("blankがないため、テキスト入力モードを無効化しました（状態を記憶）");
                 }
                 else
@@ -518,6 +519,7 @@ namespace Flashnote
                     isTextInputMode = true;
                     FrontPreviewLabel.TextInputMode = true;
                     FrontPreviewLabel.BlankAnswers = correctAnswers;
+                    showAnswer = false; // 解答表示状態をリセット
                     Debug.WriteLine("blankがあるため、テキスト入力モードを復元しました");
                 }
                 else
@@ -546,13 +548,13 @@ namespace Flashnote
                 BackPreviewLabel.ImageFolderPath = tempExtractPath;
                 BackPreviewLabel.RichText = backText;
                 BackPreviewLabel.ShowAnswer = showAnswer; // showAnswerフラグの状態を反映
-                
+
                 // 裏面の表示状態を復元
                 BackPreviewFrame.IsVisible = showAnswer;
             }
             else
             {
-                BackPreviewFrame.IsVisible = false;
+            BackPreviewFrame.IsVisible = false;
             }
         }
         // 選択肢カード表示
@@ -652,7 +654,7 @@ namespace Flashnote
             }
             else
             {
-                ChoiceExplanationFrame.IsVisible = false;
+            ChoiceExplanationFrame.IsVisible = false;
             }
         }
 
@@ -1183,6 +1185,9 @@ namespace Flashnote
                     }
                 }
                 
+                // 解答表示状態をリセット
+                showAnswer = false;
+                
                 await DisplayCard();
                 
                 // 「解答を表示」ボタンにフォーカスを設定
@@ -1248,6 +1253,9 @@ namespace Flashnote
                         label.Text = "";
                     }
                 }
+                
+                // 解答表示状態をリセット
+                showAnswer = false;
                 
                 await DisplayCard();
                 
@@ -1731,6 +1739,9 @@ namespace Flashnote
                 wasTextInputModeEnabled = false;
                 Debug.WriteLine("手動でテキスト入力モードをOFFにしたため、記憶をクリアしました");
             }
+            
+            // テキスト入力モードを変更した時は解答表示状態をリセット
+            showAnswer = false;
             
             // 現在のカードを再表示
             _ = DisplayCard();

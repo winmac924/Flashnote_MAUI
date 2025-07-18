@@ -431,14 +431,14 @@ namespace Flashnote
                         else
                         {
                             // 通常モード: 括弧と下線または正解を表示
-                            formatted.Spans.Add(new Span { Text = "(", FontSize = FontSize });
-                            formatted.Spans.Add(new Span
-                            {
-                                Text = ShowAnswer ? blankText : "_____",
-                                FontSize = FontSize,
-                                TextColor = ShowAnswer ? Colors.Red : Colors.Gray
-                            });
-                            formatted.Spans.Add(new Span { Text = ")", FontSize = FontSize });
+                        formatted.Spans.Add(new Span { Text = "(", FontSize = FontSize });
+                        formatted.Spans.Add(new Span
+                        {
+                            Text = ShowAnswer ? blankText : "_____",
+                            FontSize = FontSize,
+                            TextColor = ShowAnswer ? Colors.Red : Colors.Gray
+                        });
+                        formatted.Spans.Add(new Span { Text = ")", FontSize = FontSize });
                         }
                         break;
                     case "color":
