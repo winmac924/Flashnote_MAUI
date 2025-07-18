@@ -254,7 +254,7 @@ namespace Flashnote
 
         private void OnTextChanged(object sender, TextChangedEventArgs e)
         {
-            Debug.WriteLine($"OnTextChanged: {sender.GetType().Name} - isDirtyをtrueに設定");
+            Debug.WriteLine($"OnTextChanged: {sender.GetType().Name} - isDirtyを{isDirty}からtrueに変更");
             isDirty = true;
             // タイマーをリセット
             autoSaveTimer.Stop();
@@ -263,6 +263,7 @@ namespace Flashnote
 
         private void FrontOnTextChanged(object sender, TextChangedEventArgs e)
         {
+            Debug.WriteLine($"FrontOnTextChanged: isDirtyを{isDirty}からtrueに変更");
             isDirty = true;
             autoSaveTimer.Stop();
             autoSaveTimer.Start();
@@ -273,6 +274,7 @@ namespace Flashnote
 
         private void BackOnTextChanged(object sender, TextChangedEventArgs e)
         {
+            Debug.WriteLine($"BackOnTextChanged: isDirtyを{isDirty}からtrueに変更");
             isDirty = true;
             autoSaveTimer.Stop();
             autoSaveTimer.Start();
@@ -526,9 +528,18 @@ namespace Flashnote
         {
             if (e.CurrentSelection.FirstOrDefault() is CardInfo selectedCard)
             {
-                // カード選択時は保存処理を行わない（内容が変更されていても）
-                // 前のカードの変更は画面を離れる時（OnDisappearing）に保存される
-                Debug.WriteLine($"カード選択開始: {selectedCard.Id} - 保存処理は行いません");
+                Debug.WriteLine($"カード選択開始: {selectedCard.Id}");
+                
+                // 現在編集中のカードがある場合は保存
+                if (isDirty && !string.IsNullOrEmpty(editCardId))
+                {
+                    Debug.WriteLine($"カード選択時: 前のカードの変更を保存 - cardId: {editCardId}");
+                    await SaveCurrentCard();
+                }
+                else
+                {
+                    Debug.WriteLine($"カード選択時: 保存不要 - cardId: {editCardId}, isDirty: {isDirty}");
+                }
 
                 // 新しいカードを読み込む
                 editCardId = selectedCard.Id;
@@ -573,7 +584,7 @@ namespace Flashnote
                         break;
                 }
                 
-                Debug.WriteLine($"カード選択完了: {selectedCard.Id} - cards.txtは更新されません");
+                Debug.WriteLine($"カード選択完了: {selectedCard.Id}");
             }
         }
 
@@ -848,6 +859,10 @@ namespace Flashnote
                     }
                 }
                 
+                // isDirtyフラグをリセット（TextChangedイベント再設定前）
+                isDirty = false;
+                Debug.WriteLine("LoadCardData完了 - isDirtyフラグをリセットしました");
+                
                 // カード読み込み完了後、TextChangedイベントを再度有効にする
                 FrontTextEditor.TextChanged += OnTextChanged;
                 BackTextEditor.TextChanged += OnTextChanged;
@@ -864,10 +879,7 @@ namespace Flashnote
                     }
                 }
                 
-                // TextChangedイベント再設定後に少し待ってからisDirtyフラグをリセット
-                await Task.Delay(100);
-                isDirty = false;
-                Debug.WriteLine("LoadCardData完了 - TextChangedイベントを再設定し、isDirtyフラグをリセットしました");
+                Debug.WriteLine("LoadCardData完了 - TextChangedイベントを再設定しました");
             }
             catch (Exception ex)
             {
@@ -1426,7 +1438,7 @@ namespace Flashnote
                 }
             }
 
-            Debug.WriteLine($"OnChoiceTextChanged: isDirtyをtrueに設定");
+            Debug.WriteLine($"OnChoiceTextChanged: isDirtyを{isDirty}からtrueに変更");
             isDirty = true;
             autoSaveTimer.Stop();
             autoSaveTimer.Start();
@@ -1517,7 +1529,7 @@ namespace Flashnote
 
         private void OnChoiceQuestionTextChanged(object sender, TextChangedEventArgs e)
         {
-            Debug.WriteLine($"OnChoiceQuestionTextChanged: isDirtyをtrueに設定");
+            Debug.WriteLine($"OnChoiceQuestionTextChanged: isDirtyを{isDirty}からtrueに変更");
             isDirty = true;
             autoSaveTimer.Stop();
             autoSaveTimer.Start();
@@ -1528,7 +1540,7 @@ namespace Flashnote
 
         private void OnChoiceExplanationTextChanged(object sender, TextChangedEventArgs e)
         {
-            Debug.WriteLine($"OnChoiceExplanationTextChanged: isDirtyをtrueに設定");
+            Debug.WriteLine($"OnChoiceExplanationTextChanged: isDirtyを{isDirty}からtrueに変更");
             isDirty = true;
             autoSaveTimer.Stop();
             autoSaveTimer.Start();

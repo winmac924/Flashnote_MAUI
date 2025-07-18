@@ -182,10 +182,18 @@ namespace Flashnote
             // キーボードイベントハンドラーを登録
             RegisterKeyboardEvents();
             
-            // ページが表示された時にアクティブなボタンにフォーカスを設定
+            // 現在のカードの状態を復元
             MainThread.BeginInvokeOnMainThread(async () =>
             {
-                await Task.Delay(100); // 少し遅延させてからフォーカスを設定
+                await Task.Delay(100); // 少し遅延させてから処理を実行
+                
+                // 現在のカードを再表示して状態を復元
+                if (sortedCards != null && sortedCards.Count > 0 && currentIndex < sortedCards.Count)
+                {
+                    await DisplayCard();
+                }
+                
+                // アクティブなボタンにフォーカスを設定
                 SetFocusToActiveButton();
             });
         }
@@ -412,6 +420,9 @@ namespace Flashnote
                     await DisplayCard();
                 }
                 
+                // ボタンの表示状態を復元
+                RestoreButtonStates();
+                
                 // 「解答を表示」ボタンにフォーカスを設定
                 MainThread.BeginInvokeOnMainThread(async () =>
                 {
@@ -519,7 +530,7 @@ namespace Flashnote
             // RichTextLabelにテキストを設定
             FrontPreviewLabel.ImageFolderPath = tempExtractPath;
             FrontPreviewLabel.RichText = frontText;
-            FrontPreviewLabel.ShowAnswer = false;
+            FrontPreviewLabel.ShowAnswer = showAnswer; // showAnswerフラグの状態を反映
 
             Debug.WriteLine($"FrontPreviewLabel.ImageFolderPath (設定後): {FrontPreviewLabel.ImageFolderPath}");
 
@@ -534,10 +545,15 @@ namespace Flashnote
             {
                 BackPreviewLabel.ImageFolderPath = tempExtractPath;
                 BackPreviewLabel.RichText = backText;
-                BackPreviewLabel.ShowAnswer = false;
+                BackPreviewLabel.ShowAnswer = showAnswer; // showAnswerフラグの状態を反映
+                
+                // 裏面の表示状態を復元
+                BackPreviewFrame.IsVisible = showAnswer;
             }
-
-            BackPreviewFrame.IsVisible = false;
+            else
+            {
+                BackPreviewFrame.IsVisible = false;
+            }
         }
         // 選択肢カード表示
         private List<CheckBox> checkBoxes = new List<CheckBox>();  // チェックボックスを保持
@@ -628,10 +644,16 @@ namespace Flashnote
             if (!string.IsNullOrWhiteSpace(explanation))
             {
                 ChoiceExplanationLabel.RichText = explanation;
-                ChoiceExplanationLabel.ShowAnswer = false;
+                ChoiceExplanationLabel.ShowAnswer = showAnswer; // showAnswerフラグの状態を反映
                 ChoiceExplanationLabel.ImageFolderPath = tempExtractPath;
+                
+                // 解説の表示状態を復元
+                ChoiceExplanationFrame.IsVisible = showAnswer;
             }
-            ChoiceExplanationFrame.IsVisible = false;
+            else
+            {
+                ChoiceExplanationFrame.IsVisible = false;
+            }
         }
 
         private async void DisplayImageFillCard(CardData card)
@@ -1810,6 +1832,10 @@ namespace Flashnote
                 var correctAnswer = correctAnswers[i].Trim();
                 var resultLabel = resultLabels[i];
                 
+                // 全角数字を半角数字に変換し、スペースを除去
+                userAnswer = NormalizeText(userAnswer);
+                correctAnswer = NormalizeText(correctAnswer);
+                
                 // 大文字小文字を区別しない比較
                 bool isCorrect = string.Equals(userAnswer, correctAnswer, StringComparison.OrdinalIgnoreCase);
                 
@@ -1836,6 +1862,26 @@ namespace Flashnote
             }
             
             return allCorrect;
+        }
+
+        // テキストを正規化（全角数字を半角数字に変換し、スペースを除去）
+        private string NormalizeText(string text)
+        {
+            if (string.IsNullOrEmpty(text)) return text;
+            
+            return text
+                .Replace('０', '0')
+                .Replace('１', '1')
+                .Replace('２', '2')
+                .Replace('３', '3')
+                .Replace('４', '4')
+                .Replace('５', '5')
+                .Replace('６', '6')
+                .Replace('７', '7')
+                .Replace('８', '8')
+                .Replace('９', '9')
+                .Replace(" ", "")  // 半角スペースを除去
+                .Replace("　", ""); // 全角スペースを除去
         }
 
         // Labelを使用した装飾文字表示の実装例
@@ -2399,6 +2445,62 @@ namespace Flashnote
             {
                 Debug.WriteLine($"デフォルトテキスト入力モード設定の読み込み中にエラー: {ex.Message}");
                 isDefaultTextInputModeEnabled = false;
+            }
+        }
+
+        // ボタンの表示状態を復元
+        private void RestoreButtonStates()
+        {
+            if (showAnswer)
+            {
+                // 解答が表示されている場合
+                ShowAnswerButton.IsVisible = false;
+                
+                if (BasicCardLayout.IsVisible)
+                {
+                    // 基本カードの場合
+                    if (isTextInputMode && correctAnswers.Count > 0)
+                    {
+                        // テキスト入力モードでblankがある場合は「次へ」ボタンを表示
+                        NextButton.IsVisible = true;
+                        Correct.IsVisible = false;
+                        Incorrect.IsVisible = false;
+                        SeparatorGrid.IsVisible = false;
+                    }
+                    else
+                    {
+                        // 通常モードまたはblankがない場合は正解・不正解ボタンを表示
+                        NextButton.IsVisible = false;
+                        Correct.IsVisible = true;
+                        Incorrect.IsVisible = true;
+                        SeparatorGrid.IsVisible = true;
+                    }
+                }
+                else if (ChoiceCardLayout.IsVisible)
+                {
+                    // 選択肢カードの場合
+                    NextButton.IsVisible = true;
+                    Correct.IsVisible = false;
+                    Incorrect.IsVisible = false;
+                    SeparatorGrid.IsVisible = false;
+                }
+                else if (ImageFillCardLayout.IsVisible)
+                {
+                    // 画像穴埋めカードの場合
+                    NextButton.IsVisible = false;
+                    Correct.IsVisible = true;
+                    Incorrect.IsVisible = true;
+                    SeparatorGrid.IsVisible = true;
+                }
+            }
+            else
+            {
+                // 解答が表示されていない場合
+                ShowAnswerButton.IsVisible = true;
+                NextButton.IsVisible = false;
+                Correct.IsVisible = false;
+                Incorrect.IsVisible = false;
+                SeparatorGrid.IsVisible = false;
             }
         }
 
