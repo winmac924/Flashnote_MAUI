@@ -29,7 +29,7 @@
 		<!-- Versions - 自動アップデート対応 -->
 		<ApplicationDisplayVersion>2.3.0</ApplicationDisplayVersion>
 		<ApplicationVersion>230</ApplicationVersion>
-		<VersionPrefix>2.3.40</VersionPrefix>
+		<VersionPrefix>2.3.0</VersionPrefix>
 		<VersionSuffix Condition="'$(Configuration)' == 'Debug'">dev</VersionSuffix>
 		<AssemblyVersion>2.3.0.0</AssemblyVersion>
 		<FileVersion>2.3.0.0</FileVersion>
