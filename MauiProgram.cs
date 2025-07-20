@@ -1,6 +1,7 @@
 ﻿using Microsoft.Extensions.Logging;
 using Plugin.Maui.KeyListener;
 using SkiaSharp.Views.Maui.Controls.Hosting;
+using CommunityToolkit.Maui;
 using Flashnote.Services;
 using Flashnote.ViewModels;
 using System.Text;
@@ -9,6 +10,8 @@ namespace Flashnote;
 
 public static class MauiProgram
 {
+	public static IServiceProvider Services { get; private set; }
+
 	public static MauiApp CreateMauiApp()
 	{
 		// エンコーディングプロバイダーを登録（Shift_JIS等のサポート）
@@ -22,6 +25,7 @@ public static class MauiProgram
 			.UseMauiApp<App>()
             .UseSkiaSharp()
             .UseKeyListener()
+            .UseMauiCommunityToolkit()
 			.ConfigureFonts(fonts =>
 			{
 				fonts.AddFont("OpenSans-Regular.ttf", "OpenSansRegular");
@@ -31,6 +35,8 @@ public static class MauiProgram
 
 		// サービスの登録
 		builder.Services.AddSingleton<ConfigurationService>();
+		builder.Services.AddSingleton<UnsynchronizedNotesService>();
+		builder.Services.AddSingleton<NetworkStateService>();
 		builder.Services.AddSingleton<BlobStorageService>();
 		builder.Services.AddSingleton<SharedKeyService>();
 		builder.Services.AddSingleton<FileWatcherService>();
@@ -81,6 +87,8 @@ public static class MauiProgram
         builder.Logging.AddDebug();
 #endif
 
-		return builder.Build();
+		var app = builder.Build();
+		Services = app.Services;
+		return app;
 	}
 }

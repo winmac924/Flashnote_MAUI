@@ -457,25 +457,12 @@ namespace Flashnote.Services
                                     var imgBytes = await File.ReadAllBytesAsync(imgFile);
                                     Debug.WriteLine($"画像ファイルのサイズ: {imgBytes.Length} バイト");
                                     
-                                    string imgPath;
-                                    if (!string.IsNullOrEmpty(subFolder))
-                                    {
-                                        // サブフォルダ内のノートの場合
-                                        imgPath = $"{subFolder}/{noteName}/img";
-                                    }
-                                    else
-                                    {
-                                        // ルートのノートの場合
-                                        imgPath = $"{noteName}/img";
-                                    }
-                                    
-                                    await _blobStorageService.UploadImageBinaryAsync(uid, fileName, imgBytes, imgPath);
+                                    // Base64エンコードしてアップロード
+                                    var base64Content = Convert.ToBase64String(imgBytes);
+                                    // パス区切り文字を正規化してUIDの重複を防ぐ
+                                    var normalizedPath = notePath.Replace("\\", "/");
+                                    await _blobStorageService.UploadImageAsync(uid, fileName, base64Content, subFolder);
                                     Debug.WriteLine($"画像ファイルをアップロード: {fileName}");
-
-                                    // 一時フォルダにもコピー
-                                    var tempImgPath = Path.Combine(tempImgDir, fileName);
-                                    await File.WriteAllBytesAsync(tempImgPath, imgBytes);
-                                    Debug.WriteLine($"画像ファイルを一時フォルダにコピー: {tempImgPath}");
                                 }
                                 else
                                 {
@@ -484,117 +471,26 @@ namespace Flashnote.Services
                             }
                             catch (Exception ex)
                             {
-                                Debug.WriteLine($"画像ファイルの処理中にエラー: {imgFile}, エラー: {ex.Message}");
+                                Debug.WriteLine($"画像ファイルのアップロード中にエラー: {imgFile}, エラー: {ex.Message}");
                                 Debug.WriteLine($"スタックトレース: {ex.StackTrace}");
                             }
                         }
                     }
-
-                    // サーバーの画像ファイルを取得
-                    var serverImgFiles = await _blobStorageService.GetImageFilesAsync(uid, $"{subFolder}/{noteName}/img");
-                    Debug.WriteLine($"サーバーの画像ファイル数: {serverImgFiles.Count}");
-                    Debug.WriteLine($"サーバーの画像ファイル一覧:");
-                    foreach (var imgFile in serverImgFiles)
+                    else
                     {
-                        Debug.WriteLine($"- {imgFile}");
+                        Debug.WriteLine($"ローカル画像ディレクトリが見つかりません: {localImgDir}");
                     }
-
-                    foreach (var imgFile in serverImgFiles)
-                    {
-                        // iOS版の形式（img_########_######.jpg）をチェック
-                        if (Regex.IsMatch(imgFile, @"^img_\d{8}_\d{6}\.jpg$"))
-                        {
-                            Debug.WriteLine($"画像ファイルの処理開始: {imgFile}");
-                            var imgBytes = await _blobStorageService.GetImageBinaryAsync(uid, imgFile, $"{subFolder}/{noteName}/img");
-                            if (imgBytes != null)
-                            {
-                                try
-                                {
-                                    var tempImgPath = Path.Combine(tempImgDir, imgFile);
-                                    Debug.WriteLine($"画像ファイルの保存先: {tempImgPath}");
-                                    Debug.WriteLine($"画像ファイルのサイズ: {imgBytes.Length} バイト");
-                                    await File.WriteAllBytesAsync(tempImgPath, imgBytes);
-                                    Debug.WriteLine($"画像ファイルを一時フォルダにダウンロード: {tempImgPath}");
-                                }
-                                catch (Exception ex)
-                                {
-                                    Debug.WriteLine($"画像ファイルのダウンロード中にエラー: {imgFile}, エラー: {ex.Message}");
-                                    Debug.WriteLine($"スタックトレース: {ex.StackTrace}");
-                                }
-                            }
-                            else
-                            {
-                                Debug.WriteLine($"画像ファイルのコンテンツが取得できません: {imgFile}");
-                            }
-                        }
-                    }
-                    Debug.WriteLine($"=== 画像同期処理完了（ローカルにcards.txt存在時） ===");
-
-                    // カードのアップロード
-                    if (cardsToUpload.Any())
-                    {
-                        Debug.WriteLine($"アップロードするカード数: {cardsToUpload.Count}");
-                        foreach (var card in cardsToUpload)
-                        {
-                            // ローカルのcardsフォルダからJSONファイルを読み込む
-                            var localCardPath = Path.Combine(_tempBasePath, subFolder ?? "", noteName + "_temp", "cards", $"{card.Uuid}.json");
-                            Debug.WriteLine($"カードファイルのパス: {localCardPath}");
-                            
-                            if (File.Exists(localCardPath))
-                            {
-                                var cardContent = await File.ReadAllTextAsync(localCardPath);
-                                
-                                // カードのJSONファイルを直接アップロード
-                                string cardPath;
-                                if (!string.IsNullOrEmpty(subFolder))
-                                {
-                                    // サブフォルダ内のノートの場合
-                                    cardPath = $"{subFolder}/{noteName}/cards";
-                                }
-                                else
-                                {
-                                    // ルートのノートの場合
-                                    cardPath = $"{noteName}/cards";
-                                }
-                                
-                                await _blobStorageService.SaveNoteAsync(uid, $"{card.Uuid}.json", cardContent, cardPath);
-                                Debug.WriteLine($"カードファイルをアップロード: {localCardPath}");
-                            }
-                            else
-                            {
-                                Debug.WriteLine($"カードファイルが見つかりません: {localCardPath}");
-                            }
-                        }
-
-                        // ローカルのcards.txtをサーバーにアップロード
-                        var newContent = string.Join("\n", updatedLocalCards.Select(c => $"{c.Uuid},{c.LastModified:yyyy-MM-dd HH:mm:ss}"));
-                        var contentWithCount = $"{updatedLocalCards.Count}\n{newContent}";
-                        await _blobStorageService.SaveNoteAsync(uid, noteName, contentWithCount, subFolder);
-                        Debug.WriteLine($"サーバーにcards.txtをアップロード（カードのアップロード時）");
-                    }
-
-                    // ローカルのcards.txtを更新（ダウンロードしたカードがある場合）
-                    if (cardsToDownload.Any())
-                    {
-                        var newContent = string.Join("\n", updatedLocalCards.Select(c => $"{c.Uuid},{c.LastModified:yyyy-MM-dd HH:mm:ss}"));
-                        var contentWithCount = $"{updatedLocalCards.Count}\n{newContent}";
-                        var tempCardsPath = Path.Combine(tempDir, "cards.txt");
-                        await File.WriteAllTextAsync(tempCardsPath, contentWithCount);
-                        Debug.WriteLine($"一時フォルダにcards.txtを保存: {tempCardsPath}");
-
-                        // サーバーにアップロード
-                        await _blobStorageService.SaveNoteAsync(uid, noteName, contentWithCount, subFolder);
-                        Debug.WriteLine($"更新されたcards.txtをサーバーにアップロード: {noteName}");
-                    }
-                    else if (!cardsToUpload.Any())
-                    {
-                        Debug.WriteLine($"ローカルとサーバーの内容が同じため、cards.txtのアップロードは不要です");
-                    }
+                    Debug.WriteLine($"=== ローカル画像ファイルのアップロード処理完了 ===");
 
                     // 更新されたcards.txtを保存
                     var updatedCardsContent = $"{updatedLocalCards.Count}\n{string.Join("\n", updatedLocalCards.Select(c => $"{c.Uuid},{c.LastModified:yyyy-MM-dd HH:mm:ss}"))}";
                     await File.WriteAllTextAsync(localCardsPath, updatedCardsContent);
                     Debug.WriteLine($"更新されたcards.txtを保存: {localCardsPath}");
+
+                    // 更新されたcards.txtをサーバーにアップロード（パス区切り文字を正規化してUIDの重複を防ぐ）
+                    var normalizedNotePath = notePath.Replace("\\", "/");
+                    await _blobStorageService.SaveNoteAsync(uid, noteName, updatedCardsContent, subFolder);
+                    Debug.WriteLine($"更新されたcards.txtをサーバーにアップロード: {normalizedNotePath}/cards.txt");
 
                     // 画像ファイルの同期（変更がある場合のみ）
                     var imgDir = Path.Combine(tempDir, "img");
@@ -604,49 +500,45 @@ namespace Flashnote.Services
                         Debug.WriteLine($"画像ディレクトリを作成: {imgDir}");
                     }
 
-                    string imgSyncPath;
-                    if (!string.IsNullOrEmpty(subFolder))
+                    var imgServerPath = subFolder != null ? $"{subFolder}/{noteName}/img" : $"{noteName}/img";
+                    var imgFiles = await _blobStorageService.GetImageFilesAsync(uid, imgServerPath);
+                    foreach (var imgFile in imgFiles)
                     {
-                        // サブフォルダ内のノートの場合
-                        imgSyncPath = $"{subFolder}/{noteName}/img";
-                    }
-                    else
-                    {
-                        // ルートのノートの場合
-                        imgSyncPath = $"{noteName}/img";
-                    }
-                    
-                    var imgFiles = await _blobStorageService.GetImageFilesAsync(uid, imgSyncPath);
-                                            foreach (var imgFile in imgFiles)
+                        if (Regex.IsMatch(imgFile, @"^img_\d{8}_\d{6}\.jpg$"))
                         {
-                            if (Regex.IsMatch(imgFile, @"^img_\d{8}_\d{6}\.jpg$"))
+                            var imgFilePath = Path.Combine(imgDir, imgFile);
+                            if (!File.Exists(imgFilePath))
                             {
-                                var imgPath = Path.Combine(imgDir, imgFile);
-                                if (!File.Exists(imgPath))
+                                try
                                 {
-                                    var imgBytes = await _blobStorageService.GetImageBinaryAsync(uid, imgFile, imgSyncPath);
-                                    if (imgBytes != null)
-                                    {
-                                        try
-                                        {
-                                            await File.WriteAllBytesAsync(imgPath, imgBytes);
+                                    // バイナリデータとして直接取得
+                                    var imgBytes = await _blobStorageService.GetImageBinaryAsync(uid, imgFile, imgServerPath);
+                            if (imgBytes != null)
+                            {
+                                try
+                                {
+                                            await File.WriteAllBytesAsync(imgFilePath, imgBytes);
                                             Debug.WriteLine($"画像ファイルをダウンロード: {imgFile}");
-                                        }
-                                        catch (Exception ex)
-                                        {
+                                }
+                                catch (Exception ex)
+                                {
                                             Debug.WriteLine($"画像ファイル同期中にエラー: {imgFile}, エラー: {ex.Message}");
                                         }
                                     }
                                 }
+                                catch (Exception ex)
+                            {
+                                    Debug.WriteLine($"画像ファイル同期中にエラー: {imgFile}, エラー: {ex.Message}");
                             }
                         }
+                    }
+                    }
 
                     // .ankplsファイルを更新
                     var localBasePath = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments), "Flashnote");
                     string ankplsPath;
                     if (!string.IsNullOrEmpty(subFolder))
-                    {
-                        // サブフォルダ内のノートの場合
+                        {
                         var subFolderPath = Path.Combine(localBasePath, subFolder);
                         if (!Directory.Exists(subFolderPath))
                         {
@@ -656,29 +548,211 @@ namespace Flashnote.Services
                     }
                     else
                     {
-                        // ルートのノートの場合
                         ankplsPath = Path.Combine(localBasePath, $"{noteName}.ankpls");
-                    }
-                    
+                    }             
+                            
                     if (File.Exists(ankplsPath))
-                    {
+                            {
                         File.Delete(ankplsPath);
                         Debug.WriteLine($"既存の.ankplsファイルを削除: {ankplsPath}");
                     }
                     
                     System.IO.Compression.ZipFile.CreateFromDirectory(tempDir, ankplsPath);
                     Debug.WriteLine($".ankplsファイルを更新: {ankplsPath}");
-
-                    Debug.WriteLine($"=== ローカルにcards.txtが存在する場合の処理完了 ===");
-                }
-
-                Debug.WriteLine($"ノート '{noteName}' の同期が完了しました。");
-                Debug.WriteLine($"=== ノート同期完了 ===");
+                                }
+                                else
+                                {
+                    Debug.WriteLine($"共有ノートは最新です: {noteName}");
+                                }
             }
             catch (Exception ex)
             {
-                Debug.WriteLine($"ノートの同期中にエラー: {ex.Message}");
+                Debug.WriteLine($"共有ノート同期中にエラー: {noteName}, エラー: {ex.Message}");
                 throw;
+                            }
+                        }
+
+        /// <summary>
+        /// ノートを開く際の同期処理（MainPage → Confirmation）
+        /// </summary>
+        public async Task SyncNoteOnOpenAsync(string uid, string noteName, string subFolder = null)
+        {
+            try
+            {
+                Debug.WriteLine($"=== ノート開時同期開始 ===");
+                Debug.WriteLine($"同期開始 - UID: {uid}, ノート名: {noteName}, サブフォルダ: {subFolder ?? "なし"}");
+
+                // サーバーからcards.txtを取得
+                var serverContent = await _blobStorageService.GetNoteContentAsync(uid, noteName, subFolder);
+                if (serverContent == null)
+                {
+                    Debug.WriteLine($"サーバーにノートが存在しません: {noteName}");
+                    // サーバーにノートが存在しない場合は通知しない（新規作成の可能性があるため）
+                    return;
+                }
+
+                // ローカルのcards.txtパスを構築（一時フォルダから読み込み）
+                string localCardsPath;
+                if (!string.IsNullOrEmpty(subFolder))
+                {
+                    localCardsPath = Path.Combine(_tempBasePath, subFolder, noteName + "_temp", "cards.txt");
+                }
+                else
+                {
+                    localCardsPath = Path.Combine(_tempBasePath, noteName + "_temp", "cards.txt");
+                }
+                    
+                // ローカルのcards.txtを読み込み
+                string localContent = string.Empty;
+                if (File.Exists(localCardsPath))
+                {
+                    localContent = await File.ReadAllTextAsync(localCardsPath);
+                    Debug.WriteLine($"ローカルcards.txt読み込み完了: {localCardsPath}");
+                }
+
+                // サーバーとローカルの内容を比較
+                var serverCards = await ParseCardsFile(serverContent);
+                var localCards = await ParseCardsFile(localContent);
+
+                Debug.WriteLine($"ローカルカード数: {localCards.Count}");
+                Debug.WriteLine($"サーバーカード数: {serverCards.Count}");
+
+                // アップロードが必要なカードを特定（ローカルにあり、サーバーにない、またはローカルの方が新しい）
+                var cardsToUpload = new List<CardInfo>();
+                foreach (var localCard in localCards)
+                {
+                    var serverCard = serverCards.FirstOrDefault(c => c.Uuid == localCard.Uuid);
+                    if (serverCard == null || localCard.LastModified > serverCard.LastModified)
+                    {
+                        cardsToUpload.Add(localCard);
+                    }
+                }
+
+                // ダウンロードが必要なカードを特定（サーバーにあり、ローカルにない、またはサーバーの方が新しい）
+                var cardsToDownload = new List<CardInfo>();
+                foreach (var serverCard in serverCards)
+                {
+                    var localCard = localCards.FirstOrDefault(c => c.Uuid == serverCard.Uuid);
+                    if (localCard == null || serverCard.LastModified > localCard.LastModified)
+                    {
+                        cardsToDownload.Add(serverCard);
+                    }
+                }
+
+                Debug.WriteLine($"アップロードが必要なカード数: {cardsToUpload.Count}");
+                Debug.WriteLine($"ダウンロードが必要なカード数: {cardsToDownload.Count}");
+
+                // アップロード処理
+                if (cardsToUpload.Any())
+                {
+                    Debug.WriteLine("=== アップロード処理開始 ===");
+                    
+                    // カードファイルをアップロード
+                    foreach (var card in cardsToUpload)
+                    {
+                        var localCardPath = Path.Combine(Path.GetDirectoryName(localCardsPath), "cards", $"{card.Uuid}.json");
+                        if (File.Exists(localCardPath))
+                        {
+                            var cardContent = await File.ReadAllTextAsync(localCardPath);
+                            string cardPath;
+                            if (!string.IsNullOrEmpty(subFolder))
+                            {
+                                cardPath = $"{subFolder}/{noteName}/cards";
+                            }
+                            else
+                            {
+                                cardPath = $"{noteName}/cards";
+                            }
+                            
+                            await _blobStorageService.SaveNoteAsync(uid, $"{card.Uuid}.json", cardContent, cardPath);
+                            Debug.WriteLine($"カードファイルをアップロード: {card.Uuid}.json");
+                        }
+                    }
+
+                    // 更新されたcards.txtをアップロード
+                    var updatedCards = localCards.Where(c => !cardsToDownload.Any(d => d.Uuid == c.Uuid)).ToList();
+                    updatedCards.AddRange(cardsToDownload);
+
+                    var newContent = string.Join("\n", updatedCards.Select(c => $"{c.Uuid},{c.LastModified:yyyy-MM-dd HH:mm:ss}"));
+                    var contentWithCount = $"{updatedCards.Count}\n{newContent}";
+                    
+                    await _blobStorageService.SaveNoteAsync(uid, noteName, contentWithCount, subFolder);
+                    Debug.WriteLine($"更新されたcards.txtをアップロード");
+                }
+
+                // ダウンロード処理
+                if (cardsToDownload.Any())
+                {
+                    Debug.WriteLine("=== ダウンロード処理開始 ===");
+                    Debug.WriteLine($"ダウンロードするカード数: {cardsToDownload.Count}");
+                    
+                    // ローカルディレクトリを確保（一時フォルダに保存）
+                    var localCardsDir = Path.GetDirectoryName(localCardsPath);
+                    if (!Directory.Exists(localCardsDir))
+                    {
+                        Directory.CreateDirectory(localCardsDir);
+                    }
+
+                    foreach (var card in cardsToDownload)
+                    {
+                        string cardPath;
+                    if (!string.IsNullOrEmpty(subFolder))
+                    {
+                            cardPath = $"{subFolder}/{noteName}/cards";
+                    }
+                    else
+                    {
+                            cardPath = $"{noteName}/cards";
+                        }
+
+                        var cardContent = await _blobStorageService.GetNoteContentAsync(uid, $"{card.Uuid}.json", cardPath);
+                        if (cardContent != null)
+                        {
+                            var localCardPath = Path.Combine(localCardsDir, "cards", $"{card.Uuid}.json");
+                            var localCardDir = Path.GetDirectoryName(localCardPath);
+                            if (!Directory.Exists(localCardDir))
+                    {
+                                Directory.CreateDirectory(localCardDir);
+                            }
+                            await File.WriteAllTextAsync(localCardPath, cardContent);
+                            Debug.WriteLine($"カードファイルをダウンロード: {localCardPath}");
+                    }
+                    }
+
+                    // 更新されたcards.txtを保存
+                    var updatedCards = localCards.Where(c => !cardsToDownload.Any(d => d.Uuid == c.Uuid)).ToList();
+                    updatedCards.AddRange(cardsToDownload);
+
+                    var newContent = string.Join("\n", updatedCards.Select(c => $"{c.Uuid},{c.LastModified:yyyy-MM-dd HH:mm:ss}"));
+                    var contentWithCount = $"{updatedCards.Count}\n{newContent}";
+                    await File.WriteAllTextAsync(localCardsPath, contentWithCount);
+                    Debug.WriteLine($"更新されたcards.txtを保存: {localCardsPath}");
+                }
+                else
+                {
+                    Debug.WriteLine("ダウンロードが必要なカードはありません");
+                }
+
+                Debug.WriteLine($"=== ノート開時同期完了 ===");
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"ノート開時同期中にエラー: {ex.Message}");
+                
+                // ネットワークエラーの場合は例外を再スローして、呼び出し元で通知する
+                string errorMessage;
+                if (ex.Message.Contains("オフラインのため") || ex.Message.Contains("インターネット接続") ||
+                    ex.Message.Contains("ネットワーク接続") || ex.Message.Contains("タイムアウト") ||
+                    ex.Message.Contains("network") || ex.Message.Contains("connection") || ex.Message.Contains("timeout"))
+                {
+                    errorMessage = "オフラインのため、サーバーとの同期ができませんでした。";
+                }
+                else
+                {
+                    errorMessage = "同期処理中にエラーが発生しました。";
+                }
+                
+                throw new Exception($"{errorMessage} {ex.Message}", ex);
             }
         }
 
@@ -830,7 +904,7 @@ namespace Flashnote.Services
                             cardPath = $"{noteName}/cards";
                         }
                         
-                        var cardContent = await _blobStorageService.GetNoteContentAsync(originalUserId, $"{card.Uuid}.json", cardPath);
+                        var cardContent = await _blobStorageService.GetSharedNoteFileAsync(originalUserId, $"{notePath}/cards", $"{card.Uuid}.json");
                         if (cardContent != null)
                         {
                             var tempCardPath = Path.Combine(tempDir, "cards", $"{card.Uuid}.json");

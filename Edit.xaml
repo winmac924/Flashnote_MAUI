@@ -28,7 +28,7 @@
                 <AppThemeBinding Light="{StaticResource HeaderBackgroundLight}" 
                                 Dark="{StaticResource HeaderBackgroundDark}" />
             </Grid.BackgroundColor>
-            <Grid ColumnDefinitions="Auto,*,Auto,Auto,Auto" ColumnSpacing="10">
+            <Grid ColumnDefinitions="Auto,*,Auto,Auto,Auto,Auto" ColumnSpacing="10">
                 <!-- タイトル -->
                 <Label Grid.Column="0"
                        Text="カードの編集"
@@ -81,6 +81,12 @@
                         HeightRequest="42"
                         CornerRadius="21"
                         Clicked="OnHelpClicked"/>
+                        
+                <!-- ステータスインジケーター -->
+                <views:StatusIndicator Grid.Column="5" 
+                                       x:Name="StatusIndicator" 
+                                       VerticalOptions="Center" 
+                                       Margin="10,0,0,0" />
             </Grid>
         </Grid>
 

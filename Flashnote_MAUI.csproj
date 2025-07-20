@@ -27,12 +27,12 @@
 		<ApplicationId>winmac924.flashnote.maui</ApplicationId>
 
 		<!-- Versions - 自動アップデート対応 -->
-		<ApplicationDisplayVersion>2.2.1</ApplicationDisplayVersion>
-		<ApplicationVersion>221</ApplicationVersion>
-		<VersionPrefix>2.2.1</VersionPrefix>
+		<ApplicationDisplayVersion>2.3.0</ApplicationDisplayVersion>
+		<ApplicationVersion>230</ApplicationVersion>
+		<VersionPrefix>2.3.40</VersionPrefix>
 		<VersionSuffix Condition="'$(Configuration)' == 'Debug'">dev</VersionSuffix>
-		<AssemblyVersion>2.2.1.0</AssemblyVersion>
-		<FileVersion>2.2.1.0</FileVersion>
+		<AssemblyVersion>2.3.0.0</AssemblyVersion>
+		<FileVersion>2.3.0.0</FileVersion>
 
 		<!-- Windows配布設定 - EXE形式 -->
 		<WindowsPackageType>None</WindowsPackageType>
@@ -88,6 +88,7 @@
 	<ItemGroup>
 		<PackageReference Include="AathifMahir.Maui.MauiIcons.Fluent" Version="4.0.0" />
 		<PackageReference Include="Azure.Storage.Blobs" Version="12.24.1" />
+		<PackageReference Include="CommunityToolkit.Maui" Version="8.0.1" />
 		<PackageReference Include="FirebaseAdmin" Version="3.2.0" />
 		<PackageReference Include="FirebaseAuthentication.net" Version="4.1.0" />
 		<PackageReference Include="Microsoft.Data.Sqlite" Version="9.0.6" />
@@ -122,6 +123,9 @@
 	    <Generator>MSBuild:Compile</Generator>
 	  </MauiXaml>
 	  <MauiXaml Update="Qa.xaml">
+	    <Generator>MSBuild:Compile</Generator>
+	  </MauiXaml>
+	  <MauiXaml Update="SharedKeysSheet.xaml">
 	    <Generator>MSBuild:Compile</Generator>
 	  </MauiXaml>
 

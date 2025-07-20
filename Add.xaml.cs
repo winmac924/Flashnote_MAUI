@@ -38,6 +38,9 @@ namespace Flashnote
                 InitializeComponent();
                 Debug.WriteLine("InitializeComponent完了");
 
+                // StatusIndicatorを初期化
+                StatusIndicator.RefreshStatus();
+
                 // サブフォルダ情報を取得
                 string subFolder = null;
                 if (!string.IsNullOrEmpty(tempPath))
@@ -75,6 +78,18 @@ namespace Flashnote
                 Debug.WriteLine("CardUI初期化完了");
 
                 Debug.WriteLine("Add.xaml.cs コンストラクタ完了");
+            }
+            catch (InvalidOperationException ex) when (ex.Message.Contains("オフライン") || ex.Message.Contains("ネットワーク"))
+            {
+                Debug.WriteLine($"Add.xaml.cs コンストラクタでオフラインエラー: {ex.Message}");
+                // オフラインエラーの場合は再スローして呼び出し元で処理
+                throw;
+            }
+            catch (TimeoutException ex)
+            {
+                Debug.WriteLine($"Add.xaml.cs コンストラクタでタイムアウトエラー: {ex.Message}");
+                // タイムアウトエラーの場合は再スローして呼び出し元で処理
+                throw;
             }
             catch (Exception ex)
             {

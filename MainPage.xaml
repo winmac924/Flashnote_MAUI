@@ -113,7 +113,8 @@
                 </Grid.ColumnDefinitions>
                 
                 <!-- アプリタイトル -->
-                <Label Grid.Column="0" 
+                <Label x:Name="AppTitleLabel"
+                       Grid.Column="0" 
                        Text="📚 Flashnote" 
                        FontSize="20" 
                        FontAttributes="Bold" 

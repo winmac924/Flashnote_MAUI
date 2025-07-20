@@ -45,7 +45,15 @@ public class GitHubUpdateService
         }
         catch (Exception ex)
         {
+            // ネットワークエラーは警告レベルでログ出力
+            if (ex.Message.Contains("No such host") || ex.Message.Contains("network") || ex is System.Net.Http.HttpRequestException)
+            {
+                _logger.LogWarning("アップデート確認でネットワークエラー: オフライン状態のため、アップデート確認をスキップします");
+            }
+            else
+            {
             _logger.LogError(ex, "GitHub からのアップデート確認中にエラーが発生しました");
+            }
             return null;
         }
     }
@@ -57,7 +65,10 @@ public class GitHubUpdateService
             var url = $"{GITHUB_API_BASE}/repos/{GITHUB_OWNER}/{GITHUB_REPO}/releases/latest";
             _logger.LogInformation("GitHub API リクエスト: {Url}", url);
             
-            var response = await _httpClient.GetStringAsync(url);
+            // タイムアウト付きでリクエスト
+            using (var cts = new CancellationTokenSource(TimeSpan.FromSeconds(10)))
+            {
+                var response = await _httpClient.GetStringAsync(url, cts.Token);
             
             var options = new JsonSerializerOptions
             {
@@ -68,10 +79,21 @@ public class GitHubUpdateService
             _logger.LogInformation("最新リリース取得成功: {TagName}", release?.TagName);
             
             return release;
+            }
+        }
+        catch (OperationCanceledException)
+        {
+            _logger.LogWarning("GitHub API リクエストがタイムアウトしました。");
+            return null;
         }
         catch (HttpRequestException ex) when (ex.Message.Contains("404"))
         {
             _logger.LogInformation("GitHubリポジトリにリリースがまだ作成されていません。初回リリースを作成してください。");
+            return null;
+        }
+        catch (HttpRequestException ex) when (ex.Message.Contains("No such host"))
+        {
+            _logger.LogWarning("ネットワーク接続エラー: オフライン状態のため、アップデート確認をスキップします。");
             return null;
         }
         catch (HttpRequestException ex)

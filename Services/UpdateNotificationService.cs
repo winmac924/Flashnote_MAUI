@@ -105,6 +105,14 @@ public class UpdateNotificationService
         try
         {
             _isCheckingForUpdates = true;
+            
+            // ネットワーク接続をチェック
+            if (!System.Net.NetworkInformation.NetworkInterface.GetIsNetworkAvailable())
+            {
+                _logger.LogInformation("ネットワーク接続がないため、アップデート確認をスキップします");
+                return;
+            }
+            
             _logger.LogInformation("アップデート確認を開始します");
 
             var updateInfo = await _updateService.CheckForUpdatesAsync();

@@ -1,7 +1,7 @@
 <ContentPage xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
              xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
-             x:Class="Flashnote.Confirmation"
-             Title="確認画面">
+             xmlns:views="clr-namespace:Flashnote.Views"
+             x:Class="Flashnote.Confirmation">
 
     <ContentPage.Resources>
         <ResourceDictionary>
@@ -35,6 +35,8 @@
         </ResourceDictionary>
     </ContentPage.Resources>
 
+    <Grid>
+        <!-- メインコンテンツ -->
        <ScrollView>
            <VerticalStackLayout Padding="20" Spacing="20">
                <!-- ヘッダー情報 -->
@@ -116,4 +118,10 @@
                </Frame>
            </VerticalStackLayout>
        </ScrollView>
+        
+        <!-- ステータスインジケーター -->
+        <views:StatusIndicator x:Name="StatusIndicator" 
+                               HorizontalOptions="End" 
+                               VerticalOptions="Start" />
+    </Grid>
 </ContentPage>

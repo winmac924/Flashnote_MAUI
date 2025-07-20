@@ -1,0 +1,100 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<ContentPage x:Class="Flashnote.SharedKeysSheet"
+             xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+             BackgroundColor="Transparent">
+    
+    <Grid>
+        <!-- 背景のオーバーレイ -->
+        <BoxView BackgroundColor="Black" 
+                 Opacity="0.5" 
+                 InputTransparent="False">
+            <BoxView.GestureRecognizers>
+                <TapGestureRecognizer Tapped="OnBackgroundTapped"/>
+            </BoxView.GestureRecognizers>
+        </BoxView>
+        
+        <!-- シートコンテンツ -->
+        <Frame x:Name="SheetFrame"
+               BackgroundColor="White"
+               Padding="20"
+               Margin="0,0,0,0"
+               VerticalOptions="End"
+               HorizontalOptions="Fill"
+               HeightRequest="400"
+               HasShadow="True"
+               TranslationY="400">
+            
+            <StackLayout Spacing="20">
+                
+                <!-- シートのハンドル -->
+                <BoxView BackgroundColor="Gray" 
+                         HeightRequest="4" 
+                         WidthRequest="40" 
+                         HorizontalOptions="Center"
+                         CornerRadius="2"/>
+                
+                <!-- ヘッダー -->
+                <StackLayout Orientation="Horizontal" 
+                             HorizontalOptions="Fill" 
+                             VerticalOptions="Center">
+                    <Label Text="共有キー一覧" 
+                           FontSize="20" 
+                           FontAttributes="Bold" 
+                           TextColor="Black"/>
+                    <Button Text="✕" 
+                            BackgroundColor="Transparent" 
+                            TextColor="Gray" 
+                            FontSize="18"
+                            Clicked="OnCloseClicked"
+                            WidthRequest="40" 
+                            HeightRequest="40"/>
+                </StackLayout>
+                
+                <!-- 共有キーリスト -->
+                <CollectionView x:Name="SharedKeysCollection" 
+                               HeightRequest="280"
+                               BackgroundColor="Transparent">
+                    <CollectionView.ItemTemplate>
+                        <DataTemplate>
+                            <Frame Margin="0,5,0,5" 
+                                   Padding="15" 
+                                   BackgroundColor="LightBlue" 
+                                   CornerRadius="10"
+                                   HasShadow="True">
+                                <StackLayout Spacing="8">
+                                    <Label Text="{Binding NoteName}" 
+                                           FontSize="16" 
+                                           FontAttributes="Bold" 
+                                           TextColor="Black"/>
+                                    <Label Text="{Binding Info}" 
+                                           FontSize="12" 
+                                           TextColor="Gray"/>
+                                    <Button Text="削除" 
+                                            BackgroundColor="Red" 
+                                            TextColor="White"
+                                            HorizontalOptions="End"
+                                            Clicked="OnRemoveSharedKeyClicked"
+                                            CommandParameter="{Binding NoteName}"
+                                            WidthRequest="80"
+                                            HeightRequest="35"/>
+                                </StackLayout>
+                            </Frame>
+                        </DataTemplate>
+                    </CollectionView.ItemTemplate>
+                </CollectionView>
+                
+                <!-- ステータス表示 -->
+                <Label x:Name="StatusLabel" 
+                       Text="共有キーがありません" 
+                       FontSize="14" 
+                       TextColor="Gray"
+                       HorizontalOptions="Center"/>
+                
+            </StackLayout>
+            
+        </Frame>
+        
+    </Grid>
+    
+</ContentPage> 

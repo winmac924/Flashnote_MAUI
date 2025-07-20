@@ -28,7 +28,43 @@ namespace Flashnote
 
         public Confirmation(string note)
         {
+            try
+            {
+                Debug.WriteLine("Confirmation コンストラクタ開始");
             InitializeComponent();
+                Debug.WriteLine("Confirmation InitializeComponent完了");
+                
+                // StatusIndicatorを遅延初期化
+                _ = Task.Run(async () =>
+                {
+                    try
+                    {
+                        await Task.Delay(500); // 500ms遅延
+                        await MainThread.InvokeOnMainThreadAsync(() =>
+                        {
+                            try
+                            {
+                                StatusIndicator?.RefreshStatus();
+                                Debug.WriteLine("StatusIndicator 遅延初期化完了");
+                            }
+                            catch (Exception statusEx)
+                            {
+                                Debug.WriteLine($"StatusIndicator 遅延初期化でエラー: {statusEx.Message}");
+                            }
+                        });
+                    }
+                    catch (Exception delayEx)
+                    {
+                        Debug.WriteLine($"StatusIndicator 遅延処理でエラー: {delayEx.Message}");
+                    }
+                });
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"Confirmation コンストラクタでエラー: {ex.Message}");
+                Debug.WriteLine($"スタックトレース: {ex.StackTrace}");
+                throw; // Confirmationの基本初期化エラーは再スロー
+            }
 
             // パス設定  
             string documentsPath = Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments);
@@ -64,12 +100,44 @@ namespace Flashnote
             {
                 // データ取得  
                 int totalQuestions = GetTotalQuestions();
-                NoteTitleLabel.Text = Path.GetFileNameWithoutExtension(ankplsFilePath); // ノート名を表示
+                
+                // タイトルにサブフォルダ名を含める
+                string title = GetNoteTitleWithSubfolder();
+                NoteTitleLabel.Text = title;
+                
                 TotalQuestionsLabel.Text = $"カード枚数: {totalQuestions}";
             }
             else
             {
                 DisplayAlert("エラー", "データが見つかりませんでした", "OK");
+            }
+        }
+
+        // サブフォルダ名を含むタイトルを取得
+        private string GetNoteTitleWithSubfolder()
+        {
+            try
+            {
+                var documentsPath = Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments);
+                var flashnotePath = Path.Combine(documentsPath, "Flashnote");
+                var noteDirectory = Path.GetDirectoryName(ankplsFilePath);
+                var noteName = Path.GetFileNameWithoutExtension(ankplsFilePath);
+                
+                // ルートフォルダの場合はノート名のみ
+                if (noteDirectory.Equals(flashnotePath, StringComparison.OrdinalIgnoreCase))
+                {
+                    return noteName;
+                }
+                
+                // サブフォルダの場合は「サブフォルダ名・ノート名」の形式
+                var subfolderName = Path.GetFileName(noteDirectory);
+                return $"{subfolderName}・{noteName}";
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"タイトル生成中にエラー: {ex.Message}");
+                // エラーが発生した場合はノート名のみを返す
+                return Path.GetFileNameWithoutExtension(ankplsFilePath);
             }
         }
 
@@ -126,6 +194,16 @@ namespace Flashnote
                     await DisplayAlert("Error", "Navigation is not available.", "OK");
                 }
             }
+            catch (InvalidOperationException ex) when (ex.Message.Contains("オフライン") || ex.Message.Contains("ネットワーク"))
+            {
+                Debug.WriteLine($"オフラインエラー: {ex.Message}");
+                await DisplayAlert("ネットワークエラー", "オフラインのため、カードの追加ができません。ネットワーク接続を確認してください。", "OK");
+            }
+            catch (TimeoutException ex)
+            {
+                Debug.WriteLine($"タイムアウトエラー: {ex.Message}");
+                await DisplayAlert("タイムアウトエラー", "サーバーへの接続がタイムアウトしました。ネットワーク接続を確認してください。", "OK");
+            }
             catch (Exception ex)
             {
                 Debug.WriteLine($"AddCardClickedでエラー: {ex.Message}");
@@ -158,6 +236,16 @@ namespace Flashnote
                     Debug.WriteLine("Navigationが利用できません");
                     await DisplayAlert("Error", "Navigation is not available.", "OK");
                 }
+            }
+            catch (InvalidOperationException ex) when (ex.Message.Contains("オフライン") || ex.Message.Contains("ネットワーク"))
+            {
+                Debug.WriteLine($"オフラインエラー: {ex.Message}");
+                await DisplayAlert("ネットワークエラー", "オフラインのため、カードの編集ができません。ネットワーク接続を確認してください。", "OK");
+            }
+            catch (TimeoutException ex)
+            {
+                Debug.WriteLine($"タイムアウトエラー: {ex.Message}");
+                await DisplayAlert("タイムアウトエラー", "サーバーへの接続がタイムアウトしました。ネットワーク接続を確認してください。", "OK");
             }
             catch (Exception ex)
             {

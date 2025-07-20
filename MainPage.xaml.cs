@@ -58,8 +58,17 @@ namespace Flashnote
             _currentPath.Push(FolderPath);
             LoadNotes();
             
+            // 初期タイトルを設定
+            UpdateAppTitle();
+            
             // ファイル監視イベントを設定
             SetupFileWatcher();
+            
+            // 自動同期完了イベントを設定
+            if (_blobStorageService != null)
+            {
+                _blobStorageService.AutoSyncCompleted += OnAutoSyncCompleted;
+            }
             
             // アップデートチェックは初回起動時のみApp.xaml.csで実行
 
@@ -488,6 +497,9 @@ namespace Flashnote
                 Directory.CreateDirectory(currentFolder);
             }
 
+            // タイトルを更新
+            UpdateAppTitle();
+
             _viewModel.Notes.Clear();
 
             // 親フォルダへ戻るボタンを追加（ルートフォルダでない場合）
@@ -556,6 +568,34 @@ namespace Flashnote
             WelcomeFrame.IsVisible = showWelcome;
         }
 
+        private void UpdateAppTitle()
+        {
+            try
+            {
+                var currentFolder = _currentPath.Peek();
+                var documentsPath = Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments);
+                var flashnotePath = Path.Combine(documentsPath, "Flashnote");
+                
+                // ルートフォルダの場合は通常のタイトル
+                if (currentFolder.Equals(flashnotePath, StringComparison.OrdinalIgnoreCase))
+                {
+                    AppTitleLabel.Text = "📚 Flashnote";
+                }
+                else
+                {
+                    // サブフォルダの場合はフォルダ名を追加
+                    var folderName = Path.GetFileName(currentFolder);
+                    AppTitleLabel.Text = $"📚 Flashnote - {folderName}";
+                }
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"タイトル更新中にエラー: {ex.Message}");
+                // エラーが発生した場合はデフォルトタイトルを設定
+                AppTitleLabel.Text = "📚 Flashnote";
+            }
+        }
+
         // タップ時の処理（スタイラス or 指/マウス）
         private async void OnTapped(object sender, TappedEventArgs e)
         {
@@ -594,8 +634,83 @@ namespace Flashnote
                     else
                     {
                         // 指/マウスの場合は確認画面へ
-                        await Navigation.PushAsync(new Confirmation(note.FullPath));
-                        Debug.WriteLine($"Selected Note: {note.FullPath}");
+                        try
+                        {
+                            // ネットワーク状態を確認
+                            var networkStateService = MauiProgram.Services?.GetService<NetworkStateService>();
+                            bool isNetworkAvailable = networkStateService?.IsNetworkAvailable ?? false;
+                            
+                            // オンラインの場合のみ同期処理を実行
+                            if (isNetworkAvailable)
+                            {
+                                var uid = App.CurrentUser?.Uid;
+                                if (!string.IsNullOrEmpty(uid))
+                                {
+                                    var noteName = Path.GetFileNameWithoutExtension(note.FullPath);
+                                    string subFolder = null;
+                                    
+                                    // サブフォルダ情報を取得
+                                    var documentsPath = Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments);
+                                    var flashnotePath = Path.Combine(documentsPath, "Flashnote");
+                                    if (Path.GetDirectoryName(note.FullPath).StartsWith(flashnotePath, StringComparison.OrdinalIgnoreCase))
+                                    {
+                                        var relativePath = Path.GetRelativePath(flashnotePath, Path.GetDirectoryName(note.FullPath));
+                                        if (relativePath != "." && !relativePath.StartsWith("."))
+                                        {
+                                            subFolder = relativePath;
+                                        }
+                                    }
+                                    
+                                    Debug.WriteLine($"ノート開時同期開始: {noteName}, サブフォルダ: {subFolder ?? "なし"}");
+                                    await _cardSyncService.SyncNoteOnOpenAsync(uid, noteName, subFolder);
+                                    Debug.WriteLine($"ノート開時同期完了: {noteName}");
+                                }
+                            }
+                            else
+                            {
+                                Debug.WriteLine("オフラインのため、同期処理をスキップします");
+                            }
+                        }
+                        catch (Exception ex)
+                        {
+                            Debug.WriteLine($"ノート開時同期エラー: {ex.Message}");
+                            
+                            // 同期エラーをユーザーに通知
+                            string errorMessage;
+                            if (ex.Message.Contains("オフラインのため") || ex.Message.Contains("インターネット接続") || 
+                                ex.Message.Contains("ネットワーク接続") || ex.Message.Contains("タイムアウト"))
+                            {
+                                errorMessage = "オフラインのため、最新のカードを取得できませんでした。ローカルに保存されているカードで学習を開始します。";
+                            }
+                            else
+                            {
+                                errorMessage = "同期処理中にエラーが発生しました。ローカルに保存されているカードで学習を開始します。";
+                            }
+                            
+                            // オフライン時はトーストで軽く通知
+                            if (ex.Message.Contains("オフラインのため") || ex.Message.Contains("インターネット接続"))
+                            {
+                                // トーストメッセージで軽く通知（アラートダイアログではない）
+                                Debug.WriteLine($"オフライン通知: {errorMessage}");
+                            }
+                            else
+                            {
+                                await Microsoft.Maui.Controls.Application.Current.MainPage.DisplayAlert("同期エラー", errorMessage, "OK");
+                            }
+                        }
+                        
+                        try
+                        {
+                            Debug.WriteLine($"Confirmation画面への遷移開始: {note.FullPath}");
+                            await Navigation.PushAsync(new Confirmation(note.FullPath));
+                            Debug.WriteLine($"Confirmation画面への遷移完了: {note.FullPath}");
+                        }
+                        catch (Exception confirmationEx)
+                        {
+                            Debug.WriteLine($"Confirmation画面への遷移でエラー: {confirmationEx.Message}");
+                            Debug.WriteLine($"スタックトレース: {confirmationEx.StackTrace}");
+                            await DisplayAlert("エラー", $"ノートを開く際にエラーが発生しました: {confirmationEx.Message}", "OK");
+                        }
                     }
                 }
             }
@@ -643,10 +758,36 @@ namespace Flashnote
             // ポップアップを閉じる
             CreatePopupFrame.IsVisible = false;
             
+            // 現在のフォルダが共有フォルダかどうかをチェック
+            var currentFolder = _currentPath.Peek();
+            var documentsPath = Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments);
+            var flashnotePath = Path.Combine(documentsPath, "Flashnote");
+            
+            string subFolder = null;
+            if (currentFolder.StartsWith(flashnotePath, StringComparison.OrdinalIgnoreCase))
+            {
+                var relativePath = Path.GetRelativePath(flashnotePath, currentFolder);
+                if (relativePath != "." && !relativePath.StartsWith("."))
+                {
+                    subFolder = relativePath;
+                }
+            }
+            
+            // 共有フォルダかどうかをチェック（情報取得のため）
+            bool isInSharedFolder = !string.IsNullOrEmpty(subFolder) && _sharedKeyService.IsInSharedFolder("", subFolder);
+            
             string newNoteName = await DisplayPromptAsync("新規ノート作成", "ノートの名前を入力してください");
             if (!string.IsNullOrWhiteSpace(newNoteName))
             {
-                await SaveNewNoteAsync(newNoteName);
+                // 共有フォルダの場合は特別な処理を行う
+                if (isInSharedFolder)
+                {
+                    await SaveNewNoteInSharedFolderAsync(newNoteName, subFolder);
+                }
+                else
+                {
+                    await SaveNewNoteAsync(newNoteName);
+                }
             }
         }
 
@@ -656,10 +797,36 @@ namespace Flashnote
             // ポップアップを閉じる
             CreatePopupFrame.IsVisible = false;
             
+            // 現在のフォルダが共有フォルダかどうかをチェック
+            var currentFolder = _currentPath.Peek();
+            var documentsPath = Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments);
+            var flashnotePath = Path.Combine(documentsPath, "Flashnote");
+            
+            string subFolder = null;
+            if (currentFolder.StartsWith(flashnotePath, StringComparison.OrdinalIgnoreCase))
+            {
+                var relativePath = Path.GetRelativePath(flashnotePath, currentFolder);
+                if (relativePath != "." && !relativePath.StartsWith("."))
+                {
+                    subFolder = relativePath;
+                }
+            }
+            
+            // 共有フォルダかどうかをチェック（情報取得のため）
+            bool isInSharedFolder = !string.IsNullOrEmpty(subFolder) && _sharedKeyService.IsInSharedFolder("", subFolder);
+            
             string newFolderName = await DisplayPromptAsync("新規フォルダ作成", "フォルダの名前を入力してください");
             if (!string.IsNullOrWhiteSpace(newFolderName))
             {
-                CreateNewFolder(newFolderName);
+                // 共有フォルダの場合は特別な処理を行う
+                if (isInSharedFolder)
+                {
+                    await CreateNewFolderInSharedFolderAsync(newFolderName, subFolder);
+                }
+                else
+                {
+                    CreateNewFolder(newFolderName);
+                }
             }
         }
 
@@ -735,6 +902,24 @@ namespace Flashnote
             // ドロップダウンメニューを閉じる
             ImportDropdownFrame.IsVisible = false;
             
+            // 現在のフォルダが共有フォルダかどうかをチェック
+            var currentFolder = _currentPath.Peek();
+            var documentsPath = Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments);
+            var flashnotePath = Path.Combine(documentsPath, "Flashnote");
+            
+            string subFolder = null;
+            if (currentFolder.StartsWith(flashnotePath, StringComparison.OrdinalIgnoreCase))
+            {
+                var relativePath = Path.GetRelativePath(flashnotePath, currentFolder);
+                if (relativePath != "." && !relativePath.StartsWith("."))
+                {
+                    subFolder = relativePath;
+                }
+            }
+            
+            // 共有フォルダかどうかをチェック（情報取得のため）
+            bool isInSharedFolder = !string.IsNullOrEmpty(subFolder) && _sharedKeyService.IsInSharedFolder("", subFolder);
+            
             try
             {
                 // APKGファイル選択
@@ -758,7 +943,7 @@ namespace Flashnote
 
                 // インポート処理
                 var importer = new AnkiImporter(_blobStorageService);
-                var cards = await importer.ImportApkg(result.FullPath);
+                List<CardData> cards = await importer.ImportApkg(result.FullPath);
 
                 if (cards == null || cards.Count == 0)
                 {
@@ -773,9 +958,17 @@ namespace Flashnote
                 if (string.IsNullOrWhiteSpace(noteName))
                     return;
 
-                // 現在のフォルダにノートを保存
-                string currentFolder = _currentPath.Peek();
-                string savedPath = await importer.SaveImportedCards(cards, currentFolder, noteName);
+                // 共有フォルダの場合は特別な処理を行う
+                string savedPath;
+                if (isInSharedFolder)
+                {
+                    savedPath = await ImportAnkiInSharedFolderAsync(importer, cards, noteName, subFolder);
+                }
+                else
+                {
+                    // 通常のフォルダにノートを保存
+                    savedPath = await importer.SaveImportedCards(cards, currentFolder, noteName);
+                }
 
                 // ノートリストを更新
                 LoadNotes();
@@ -928,12 +1121,70 @@ namespace Flashnote
             _ = SaveNewNoteAsync(noteName);
         }
 
-        private void CreateNewFolder(string folderName)
+        private async void CreateNewFolder(string folderName)
         {
-            var currentFolder = _currentPath.Peek();
-            var newFolderPath = Path.Combine(currentFolder, folderName);
-            Directory.CreateDirectory(newFolderPath);
-            _viewModel.Notes.Insert(0, new Note { Name = folderName, Icon = "folder.png", IsFolder = true, FullPath = newFolderPath });
+            try
+            {
+                Debug.WriteLine($"新規フォルダ作成開始: {folderName}");
+                var currentFolder = _currentPath.Peek();
+                var newFolderPath = Path.Combine(currentFolder, folderName);
+                Directory.CreateDirectory(newFolderPath);
+                Debug.WriteLine($"ローカルフォルダを作成: {newFolderPath}");
+
+                // フォルダをノートリストに追加
+                _viewModel.Notes.Insert(0, new Note { Name = folderName, Icon = "folder.png", IsFolder = true, FullPath = newFolderPath, LastModified = Directory.GetLastWriteTime(newFolderPath) });
+
+                // Blob Storageにフォルダ構造を反映（プレースホルダーファイルを作成）
+                try
+                {
+                    var uid = App.CurrentUser?.Uid;
+                    if (!string.IsNullOrEmpty(uid))
+                    {
+                        Debug.WriteLine($"Blob Storageへのフォルダ作成開始: {folderName}");
+                        
+                        // サブフォルダのパスを取得
+                        string subFolder = null;
+                        var documentsPath = Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments);
+                        var flashnotePath = Path.Combine(documentsPath, "Flashnote");
+                        
+                        if (currentFolder.StartsWith(flashnotePath, StringComparison.OrdinalIgnoreCase))
+                        {
+                            var relativePath = Path.GetRelativePath(flashnotePath, currentFolder);
+                            if (relativePath != ".")
+                            {
+                                subFolder = relativePath;
+                            }
+                        }
+                        
+                        // フォルダのパスを構築
+                        string folderPath = subFolder != null ? $"{subFolder}/{folderName}" : folderName;
+                        Debug.WriteLine($"フォルダパス: {folderPath}");
+                        
+                        // Blob Storageではフォルダを直接作成できないため、プレースホルダーファイルを作成
+                        // これにより、フォルダ構造が維持される
+                        var placeholderContent = "# This is a placeholder file to maintain folder structure";
+                        await _blobStorageService.SaveNoteAsync(uid, ".folder_placeholder", placeholderContent, folderPath);
+                        Debug.WriteLine($"フォルダプレースホルダーをBlob Storageに作成: {folderPath}/.folder_placeholder");
+                    }
+                    else
+                    {
+                        Debug.WriteLine("ユーザーIDが取得できないため、Blob Storageへのフォルダ作成をスキップ");
+                    }
+                }
+                catch (Exception ex)
+                {
+                    Debug.WriteLine($"Blob Storageへのフォルダ作成中にエラー: {ex.Message}");
+                    // フォルダ作成エラーはローカル作成を妨げないため、警告のみ表示
+                    await DisplayAlert("警告", "フォルダはローカルに作成されましたが、サーバーへの同期に失敗しました。", "OK");
+                }
+
+                Debug.WriteLine($"新規フォルダ作成完了: {folderName}");
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"フォルダ作成中にエラー: {ex.Message}");
+                await DisplayAlert("エラー", $"フォルダの作成に失敗しました: {ex.Message}", "OK");
+            }
         }
 
         private void CollectCardsFromFolder(string folderPath, List<string> cards)
@@ -1199,6 +1450,17 @@ namespace Flashnote
 
                 var uid = App.CurrentUser.Uid;
                 
+                // ネットワーク状態を事前チェック
+                var networkStateService = MauiProgram.Services?.GetService<NetworkStateService>();
+                if (networkStateService != null && !networkStateService.IsNetworkAvailable)
+                {
+                    await DisplayAlert("ネットワークエラー", "インターネット接続がありません。ネットワーク接続を確認してから再試行してください。", "OK");
+                    return;
+                }
+                
+                // Azure接続状態をリセット（ネットワーク状態変化に対応）
+                _blobStorageService.ResetConnectionState();
+                
                 // 1. 通常のノート同期
                 await _cardSyncService.SyncAllNotesAsync(uid);
                 
@@ -1211,10 +1473,34 @@ namespace Flashnote
                 Debug.WriteLine("同期完了、ノートリストを更新します");
                 LoadNotes();
             }
+            catch (InvalidOperationException ex) when (ex.Message.Contains("オフライン") || ex.Message.Contains("接続"))
+            {
+                Debug.WriteLine($"ネットワーク関連エラー: {ex.Message}");
+                await DisplayAlert("ネットワークエラー", "インターネット接続に問題があります。ネットワーク接続を確認してから再試行してください。", "OK");
+            }
+            catch (TimeoutException ex)
+            {
+                Debug.WriteLine($"タイムアウトエラー: {ex.Message}");
+                await DisplayAlert("タイムアウトエラー", "サーバーへの接続がタイムアウトしました。ネットワーク接続を確認してから再試行してください。", "OK");
+            }
             catch (Exception ex)
             {
                 Debug.WriteLine($"同期中にエラー: {ex.Message}");
-                await DisplayAlert("同期エラー", $"同期中にエラーが発生しました: {ex.Message}", "OK");
+                Debug.WriteLine($"エラータイプ: {ex.GetType().Name}");
+                Debug.WriteLine($"スタックトレース: {ex.StackTrace}");
+                
+                // エラーメッセージをユーザーフレンドリーに
+                string userMessage = ex.Message;
+                if (ex.Message.Contains("CancellationTokenSource has been disposed"))
+                {
+                    userMessage = "ネットワーク接続が不安定です。しばらく待ってから再試行してください。";
+                }
+                else if (ex.Message.Contains("Azure") || ex.Message.Contains("Blob"))
+                {
+                    userMessage = "クラウドストレージへの接続に問題があります。ネットワーク接続を確認してください。";
+                }
+                
+                await DisplayAlert("同期エラー", $"同期中にエラーが発生しました: {userMessage}", "OK");
             }
             finally
             {
@@ -1312,6 +1598,232 @@ namespace Flashnote
                 _fileWatcherService.FileRenamed -= OnFileRenamed;
                 _fileWatcherService.DirectoryCreated -= OnDirectoryCreated;
                 _fileWatcherService.DirectoryDeleted -= OnDirectoryDeleted;
+            }
+            
+            // 自動同期完了イベントを解除
+            if (_blobStorageService != null)
+            {
+                _blobStorageService.AutoSyncCompleted -= OnAutoSyncCompleted;
+            }
+        }
+
+        /// <summary>
+        /// 自動同期完了時の処理
+        /// </summary>
+        private void OnAutoSyncCompleted(object sender, EventArgs e)
+        {
+            try
+            {
+                Debug.WriteLine("自動同期完了イベントを受信、ノートリストを更新します");
+                MainThread.BeginInvokeOnMainThread(() =>
+                {
+                    LoadNotes();
+                });
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"自動同期完了処理エラー: {ex.Message}");
+            }
+        }
+
+        /// <summary>
+        /// 現在のフォルダが共有フォルダかどうかをチェックする
+        /// </summary>
+        /// <returns>subFolderパス（共有フォルダの場合はnull、そうでなければサブフォルダパス）</returns>
+        private string CheckIfSharedFolder()
+        {
+            var currentFolder = _currentPath.Peek();
+            var documentsPath = Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments);
+            var flashnotePath = Path.Combine(documentsPath, "Flashnote");
+            
+            string subFolder = null;
+            if (currentFolder.StartsWith(flashnotePath, StringComparison.OrdinalIgnoreCase))
+            {
+                var relativePath = Path.GetRelativePath(flashnotePath, currentFolder);
+                if (relativePath != "." && !relativePath.StartsWith("."))
+                {
+                    subFolder = relativePath;
+                }
+            }
+            
+            // 共有フォルダの場合はnullを返す
+            if (!string.IsNullOrEmpty(subFolder) && _sharedKeyService.IsInSharedFolder("", subFolder))
+            {
+                return null;
+            }
+            
+            return subFolder;
+        }
+
+        /// <summary>
+        /// 共有フォルダ内で新しいノートを作成する
+        /// </summary>
+        private async Task SaveNewNoteInSharedFolderAsync(string noteName, string subFolder)
+        {
+            try
+            {
+                Debug.WriteLine($"共有フォルダ内で新規ノート作成開始: {noteName}, サブフォルダ: {subFolder}");
+                
+                // 共有フォルダの情報を取得
+                var sharedInfo = _sharedKeyService.GetSharedNoteInfo(subFolder);
+                if (sharedInfo == null)
+                {
+                    await DisplayAlert("エラー", "共有フォルダの情報が見つかりません。", "OK");
+                    return;
+                }
+                
+                Debug.WriteLine($"共有フォルダ情報 - 元UID: {sharedInfo.OriginalUserId}, パス: {sharedInfo.NotePath}");
+                
+                // ローカルに一時ノートを作成
+                var currentFolder = _currentPath.Peek();
+                var filePath = Path.Combine(currentFolder, $"{noteName}.ankpls");
+                
+                // 一時フォルダを作成
+                var tempFolder = Path.Combine(
+                    Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+                    "Flashnote",
+                    subFolder,
+                    noteName + "_temp");
+
+                if (!Directory.Exists(tempFolder))
+                {
+                    Directory.CreateDirectory(tempFolder);
+                }
+                
+                // cards.txtを作成
+                var cardsFilePath = Path.Combine(tempFolder, "cards.txt");
+                File.WriteAllText(cardsFilePath, "0\n");
+                
+                // ZIPファイルを作成
+                if (File.Exists(filePath))
+                {
+                    File.Delete(filePath);
+                }
+                ZipFile.CreateFromDirectory(tempFolder, filePath);
+                
+                // ノートをリストに追加
+                var newNote = new Note 
+                { 
+                    Name = noteName, 
+                    Icon = "note1.png", 
+                    IsFolder = false, 
+                    FullPath = filePath,
+                    LastModified = File.GetLastWriteTime(filePath)
+                };
+                _viewModel.Notes.Insert(0, newNote);
+                
+                // 共有ノートとして元のUID配下にアップロード
+                var fullNotePath = $"{sharedInfo.NotePath}/{noteName}";
+                await _blobStorageService.SaveSharedNoteFileAsync(sharedInfo.OriginalUserId, fullNotePath, "cards.txt", "0\n");
+                Debug.WriteLine($"共有ノートとしてアップロード完了: {fullNotePath}");
+                
+                LoadNotes();
+                await DisplayAlert("成功", $"共有フォルダ内に新しいノート「{noteName}」を作成しました。", "OK");
+                Debug.WriteLine($"共有フォルダ内でのノート作成完了: {noteName}");
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"共有フォルダ内でのノート作成中にエラー: {ex.Message}");
+                await DisplayAlert("エラー", $"ノートの作成に失敗しました: {ex.Message}", "OK");
+            }
+        }
+
+        /// <summary>
+        /// 共有フォルダ内で新しいフォルダを作成する
+        /// </summary>
+        private async Task CreateNewFolderInSharedFolderAsync(string folderName, string subFolder)
+        {
+            try
+            {
+                Debug.WriteLine($"共有フォルダ内で新規フォルダ作成開始: {folderName}, サブフォルダ: {subFolder}");
+                
+                // 共有フォルダの情報を取得
+                var sharedInfo = _sharedKeyService.GetSharedNoteInfo(subFolder);
+                if (sharedInfo == null)
+                {
+                    await DisplayAlert("エラー", "共有フォルダの情報が見つかりません。", "OK");
+                    return;
+                }
+                
+                Debug.WriteLine($"共有フォルダ情報 - 元UID: {sharedInfo.OriginalUserId}, パス: {sharedInfo.NotePath}");
+                
+                // ローカルフォルダを作成
+                var currentFolder = _currentPath.Peek();
+                var newFolderPath = Path.Combine(currentFolder, folderName);
+                Directory.CreateDirectory(newFolderPath);
+                
+                // フォルダをリストに追加
+                _viewModel.Notes.Insert(0, new Note 
+                { 
+                    Name = folderName, 
+                    Icon = "folder.png", 
+                    IsFolder = true, 
+                    FullPath = newFolderPath, 
+                    LastModified = Directory.GetLastWriteTime(newFolderPath) 
+                });
+                
+                // 共有フォルダとして元のUID配下にプレースホルダーを作成
+                var fullFolderPath = $"{sharedInfo.NotePath}/{folderName}";
+                var placeholderContent = "# This is a placeholder file to maintain folder structure";
+                await _blobStorageService.SaveSharedNoteFileAsync(sharedInfo.OriginalUserId, fullFolderPath, ".folder_placeholder", placeholderContent);
+                Debug.WriteLine($"共有フォルダプレースホルダーを作成: {fullFolderPath}/.folder_placeholder");
+                
+                await DisplayAlert("成功", $"共有フォルダ内に新しいフォルダ「{folderName}」を作成しました。", "OK");
+                Debug.WriteLine($"共有フォルダ内でのフォルダ作成完了: {folderName}");
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"共有フォルダ内でのフォルダ作成中にエラー: {ex.Message}");
+                await DisplayAlert("エラー", $"フォルダの作成に失敗しました: {ex.Message}", "OK");
+            }
+        }
+
+        /// <summary>
+        /// 共有フォルダ内でAnkiファイルをインポートする
+        /// </summary>
+        private async Task<string> ImportAnkiInSharedFolderAsync(AnkiImporter importer, List<CardData> cards, string noteName, string subFolder)
+        {
+            try
+            {
+                Debug.WriteLine($"共有フォルダ内でAnkiインポート開始: {noteName}, サブフォルダ: {subFolder}");
+                
+                // 共有フォルダの情報を取得
+                var sharedInfo = _sharedKeyService.GetSharedNoteInfo(subFolder);
+                if (sharedInfo == null)
+                {
+                    await DisplayAlert("エラー", "共有フォルダの情報が見つかりません。", "OK");
+                    return null;
+                }
+                
+                Debug.WriteLine($"共有フォルダ情報 - 元UID: {sharedInfo.OriginalUserId}, パス: {sharedInfo.NotePath}");
+                
+                // 通常のインポート処理を実行（ローカル保存）
+                var currentFolder = _currentPath.Peek();
+                var savedPath = await importer.SaveImportedCards(cards, currentFolder, noteName);
+                
+                // 共有ノートとして元のUID配下にもアップロード
+                var fullNotePath = $"{sharedInfo.NotePath}/{noteName}";
+                
+                // cards.txtをアップロード
+                var cardsContent = $"{cards.Count}\n{string.Join("\n", cards.Select((card, index) => $"{card.id},{DateTime.Now:yyyy-MM-dd HH:mm:ss}"))}";
+                await _blobStorageService.SaveSharedNoteFileAsync(sharedInfo.OriginalUserId, fullNotePath, "cards.txt", cardsContent);
+                
+                // 各カードファイルをアップロード
+                foreach (var card in cards)
+                {
+                    var cardJson = System.Text.Json.JsonSerializer.Serialize(card);
+                    await _blobStorageService.SaveSharedNoteFileAsync(sharedInfo.OriginalUserId, $"{fullNotePath}/cards", $"{card.id}.json", cardJson);
+                }
+                
+                Debug.WriteLine($"共有ノートとしてAnkiインポート完了: {fullNotePath}");
+                
+                return savedPath;
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"共有フォルダ内でのAnkiインポート中にエラー: {ex.Message}");
+                await DisplayAlert("エラー", $"インポートに失敗しました: {ex.Message}", "OK");
+                return null;
             }
         }
     }

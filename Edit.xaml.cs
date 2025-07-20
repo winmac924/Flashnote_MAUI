@@ -8,6 +8,7 @@ using System.Web;
 using System.Reflection;
 using Flashnote.Views;
 using Flashnote.Models;
+using Flashnote.Services;
 
 namespace Flashnote
 {
@@ -34,6 +35,7 @@ namespace Flashnote
         private const float HANDLE_HIT_SIZE = 35; // ハンドルのクリック判定サイズ（より大きい）
         private const float MAX_CANVAS_WIDTH = 600f;  // キャンバスの最大幅
         private const float MAX_CANVAS_HEIGHT = 800f; // キャンバスの最大高さ
+        private readonly BlobStorageService _blobStorageService;
 
         /// <summary>
         /// 画像座標をキャンバス座標に変換する（iOS版に合わせて絶対座標を使用）
@@ -141,9 +143,15 @@ namespace Flashnote
             {
                 Debug.WriteLine("Edit.xaml.cs コンストラクタ開始");
                 InitializeComponent();
+                
+                // StatusIndicatorを初期化
+                StatusIndicator.RefreshStatus();
 
                 tempExtractPath = tempPath;
                 ankplsFilePath = notePath;
+                
+                // BlobStorageServiceを取得
+                _blobStorageService = MauiProgram.Services.GetService<BlobStorageService>();
 
                 // ノート名を設定
                 NoteTitleLabel.Text = Path.GetFileNameWithoutExtension(ankplsFilePath);
@@ -512,6 +520,120 @@ namespace Flashnote
                 else
                 {
                     Debug.WriteLine("内容に変更がないため、.ankplsファイルは更新しません");
+                }
+
+                // カード保存後にBlob Storageにアップロード
+                if (isDirty)
+                {
+                    try
+                    {
+                        var uid = App.CurrentUser?.Uid;
+                        if (!string.IsNullOrEmpty(uid))
+                        {
+                            var noteName = Path.GetFileNameWithoutExtension(ankplsFilePath);
+                            string subFolder = null;
+                            
+                            // サブフォルダ情報を取得
+                            var documentsPath = Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments);
+                            var flashnotePath = Path.Combine(documentsPath, "Flashnote");
+                            var noteDirectory = Path.GetDirectoryName(ankplsFilePath);
+                            if (noteDirectory.StartsWith(flashnotePath, StringComparison.OrdinalIgnoreCase))
+                            {
+                                var relativePath = Path.GetRelativePath(flashnotePath, noteDirectory);
+                                if (relativePath != "." && !relativePath.StartsWith("."))
+                                {
+                                    subFolder = relativePath;
+                                }
+                            }
+                            
+                            Debug.WriteLine($"カード編集後のBlob Storageアップロード開始: {noteName}");
+                            
+                            // 共有ノートかどうかをチェック
+                            var sharedKeyService = MauiProgram.Services.GetService<SharedKeyService>();
+                            bool isSharedNote = !string.IsNullOrEmpty(subFolder) && sharedKeyService.IsInSharedFolder(noteName, subFolder);
+                            
+                            var cardsFilePath = Path.Combine(tempExtractPath, "cards.txt");
+                            
+                            if (isSharedNote)
+                            {
+                                // 共有ノートの場合は元のUID配下に保存
+                                await SaveCardToSharedNoteAsync(noteName, subFolder, sharedKeyService, cardsFilePath, jsonPath, jsonContent);
+                            }
+                            else
+                            {
+                                // 通常ノートの場合は自分のUID配下に保存
+                                await SaveCardToRegularNoteAsync(uid, noteName, subFolder, cardsFilePath, jsonPath, jsonContent);
+                            }
+                            
+                            Debug.WriteLine($"カード編集後のBlob Storageアップロード完了: {noteName}");
+                        }
+                    }
+                    catch (Exception uploadEx)
+                    {
+                        Debug.WriteLine($"Blob Storageアップロードエラー: {uploadEx.Message}");
+                        
+                        // 未同期ノートとして記録
+                        try
+                        {
+                            var unsyncService = MauiProgram.Services.GetService<UnsynchronizedNotesService>();
+                            var noteName = Path.GetFileNameWithoutExtension(ankplsFilePath);
+                            
+                            // サブフォルダ情報を取得
+                            string subFolder = null;
+                            var documentsPath = Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments);
+                            var flashnotePath = Path.Combine(documentsPath, "Flashnote");
+                            var noteDirectory = Path.GetDirectoryName(ankplsFilePath);
+                            if (noteDirectory.StartsWith(flashnotePath, StringComparison.OrdinalIgnoreCase))
+                            {
+                                var relativePath = Path.GetRelativePath(flashnotePath, noteDirectory);
+                                if (relativePath != "." && !relativePath.StartsWith("."))
+                                {
+                                    subFolder = relativePath;
+                                }
+                            }
+                            
+                            string reason = "offline";
+                            if (App.CurrentUser == null)
+                            {
+                                reason = "not_logged_in";
+                            }
+                            else if (uploadEx.Message.Contains("オフラインのため") || 
+                                    uploadEx.Message.Contains("インターネット接続") ||
+                                    uploadEx.Message.Contains("ネットワーク接続"))
+                            {
+                                reason = "offline";
+                            }
+                            
+                            unsyncService?.AddUnsynchronizedNote(noteName, subFolder, reason);
+                            Debug.WriteLine($"未同期ノートとして記録: {noteName} (理由: {reason})");
+                        }
+                        catch (Exception unsyncEx)
+                        {
+                            Debug.WriteLine($"未同期ノート記録エラー: {unsyncEx.Message}");
+                        }
+                        
+                        // アップロードエラーをユーザーに通知
+                        string errorMessage;
+                        bool isOfflineError = uploadEx.Message.Contains("オフラインのため") || 
+                                             uploadEx.Message.Contains("インターネット接続") ||
+                                             uploadEx.Message.Contains("ネットワーク接続") || 
+                                             uploadEx.Message.Contains("タイムアウト") ||
+                                             uploadEx.Message.Contains("network") || 
+                                             uploadEx.Message.Contains("connection") || 
+                                             uploadEx.Message.Contains("timeout");
+                        
+                        if (isOfflineError)
+                        {
+                            errorMessage = "オフラインのため、サーバーへの同期に失敗しました。カードはローカルに保存されています。ログイン復帰時に自動同期されます。";
+                            // オフライン時はトーストで軽く通知（アラートダイアログを表示しない）
+                            Debug.WriteLine($"オフライン通知: {errorMessage}");
+                        }
+                        else
+                        {
+                            errorMessage = "サーバーへの同期に失敗しました。カードはローカルに保存されています。ログイン復帰時に自動同期されます。";
+                            await Microsoft.Maui.Controls.Application.Current.MainPage.DisplayAlert("同期エラー", errorMessage, "OK");
+                        }
+                    }
                 }
 
                 isDirty = false;
@@ -1860,6 +1982,85 @@ namespace Flashnote
             {
                 Debug.WriteLine($"ヘルプ表示中にエラー: {ex.Message}");
                 await DisplayAlert("エラー", "ヘルプの表示に失敗しました", "OK");
+            }
+        }
+
+        /// <summary>
+        /// 通常ノート（自分のUID配下）にカードを保存
+        /// </summary>
+        private async Task SaveCardToRegularNoteAsync(string uid, string noteName, string subFolder, string cardsFilePath, string jsonPath, string jsonContent)
+        {
+            try
+            {
+                // cards.txtをアップロード
+                if (File.Exists(cardsFilePath))
+                {
+                    var cardsContent = await File.ReadAllTextAsync(cardsFilePath);
+                    await _blobStorageService.SaveNoteAsync(uid, noteName, cardsContent, subFolder);
+                    Debug.WriteLine($"通常ノート: cards.txtをBlob Storageにアップロード: {noteName}");
+                }
+                
+                // 編集されたカードのJSONファイルをアップロード
+                if (File.Exists(jsonPath))
+                {
+                    string cardPath;
+                    if (!string.IsNullOrEmpty(subFolder))
+                    {
+                        cardPath = $"{subFolder}/{noteName}/cards";
+                    }
+                    else
+                    {
+                        cardPath = $"{noteName}/cards";
+                    }
+                    await _blobStorageService.SaveNoteAsync(uid, $"{editCardId}.json", jsonContent, cardPath);
+                    Debug.WriteLine($"通常ノート: カードJSONファイルをBlob Storageにアップロード: {editCardId}.json");
+                }
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"通常ノートへのカード保存エラー: {ex.Message}");
+                throw;
+            }
+        }
+
+        /// <summary>
+        /// 共有ノート（元のUID配下）にカードを保存
+        /// </summary>
+        private async Task SaveCardToSharedNoteAsync(string noteName, string subFolder, SharedKeyService sharedKeyService, string cardsFilePath, string jsonPath, string jsonContent)
+        {
+            try
+            {
+                // 共有ノート情報を取得
+                var sharedInfo = sharedKeyService.GetSharedNoteInfo(subFolder);
+                if (sharedInfo == null)
+                {
+                    Debug.WriteLine($"共有ノート情報が見つかりません: {subFolder}");
+                    return;
+                }
+                
+                Debug.WriteLine($"共有ノート情報 - 元UID: {sharedInfo.OriginalUserId}, パス: {sharedInfo.NotePath}");
+                
+                // cards.txtをアップロード
+                if (File.Exists(cardsFilePath))
+                {
+                    var cardsContent = await File.ReadAllTextAsync(cardsFilePath);
+                    var fullNotePath = $"{sharedInfo.NotePath}/{noteName}";
+                    await _blobStorageService.SaveSharedNoteFileAsync(sharedInfo.OriginalUserId, fullNotePath, "cards.txt", cardsContent);
+                    Debug.WriteLine($"共有ノート: cards.txtをBlob Storageにアップロード: {fullNotePath}");
+                }
+                
+                // 編集されたカードのJSONファイルをアップロード
+                if (File.Exists(jsonPath))
+                {
+                    var fullCardPath = $"{sharedInfo.NotePath}/{noteName}/cards";
+                    await _blobStorageService.SaveSharedNoteFileAsync(sharedInfo.OriginalUserId, fullCardPath, $"{editCardId}.json", jsonContent);
+                    Debug.WriteLine($"共有ノート: カードJSONファイルをBlob Storageにアップロード: {editCardId}.json");
+                }
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"共有ノートへのカード保存エラー: {ex.Message}");
+                throw;
             }
         }
     }
