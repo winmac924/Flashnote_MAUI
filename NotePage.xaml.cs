@@ -1236,10 +1236,10 @@ namespace Flashnote
                     {
                         // PageCacheから現在のページの画像を取得
                         var cacheDir = Path.Combine(tempExtractPath, "PageCache");
-                        var highDpiCacheFile = Path.Combine(cacheDir, $"page_{currentPageIndex}_{(int)150f}.png");
-                        var mediumDpiCacheFile = Path.Combine(cacheDir, $"page_{currentPageIndex}_{(int)96f}.png");
-                        var oldHighDpiCacheFile = Path.Combine(cacheDir, $"page_{currentPageIndex}_{(int)72f}.png");
-                        var oldLowDpiCacheFile = Path.Combine(cacheDir, $"page_{currentPageIndex}_{(int)36f}.png");
+                        var highDpiCacheFile = Path.Combine(cacheDir, $"page_{currentPageIndex}_{(int)150f}.jpg");
+                        var mediumDpiCacheFile = Path.Combine(cacheDir, $"page_{currentPageIndex}_{(int)96f}.jpg");
+                        var oldHighDpiCacheFile = Path.Combine(cacheDir, $"page_{currentPageIndex}_{(int)72f}.jpg");
+                        var oldLowDpiCacheFile = Path.Combine(cacheDir, $"page_{currentPageIndex}_{(int)36f}.jpg");
 
                         if (File.Exists(highDpiCacheFile))
                         {
@@ -1321,10 +1321,10 @@ namespace Flashnote
                 {
                     // PageCacheから画像を取得
                     var cacheDir = Path.Combine(tempExtractPath, "PageCache");
-                    var highDpiCacheFile = Path.Combine(cacheDir, $"page_{currentPageIndex}_{(int)150f}.png");
-                    var mediumDpiCacheFile = Path.Combine(cacheDir, $"page_{currentPageIndex}_{(int)96f}.png");
-                    var oldHighDpiCacheFile = Path.Combine(cacheDir, $"page_{currentPageIndex}_{(int)72f}.png");
-                    var oldLowDpiCacheFile = Path.Combine(cacheDir, $"page_{currentPageIndex}_{(int)36f}.png");
+                    var highDpiCacheFile = Path.Combine(cacheDir, $"page_{currentPageIndex}_{(int)150f}.jpg");
+                    var mediumDpiCacheFile = Path.Combine(cacheDir, $"page_{currentPageIndex}_{(int)96f}.jpg");
+                    var oldHighDpiCacheFile = Path.Combine(cacheDir, $"page_{currentPageIndex}_{(int)72f}.jpg");
+                    var oldLowDpiCacheFile = Path.Combine(cacheDir, $"page_{currentPageIndex}_{(int)36f}.jpg");
 
                     string imageFile = null;
                     if (File.Exists(highDpiCacheFile))
@@ -2007,10 +2007,10 @@ namespace Flashnote
                 {
                     // PageCacheから選択されたページの画像を取得
                     var cacheDir = Path.Combine(tempExtractPath, "PageCache");
-                    var highDpiCacheFile = Path.Combine(cacheDir, $"page_{pageIndex}_{(int)150f}.png");
-                    var mediumDpiCacheFile = Path.Combine(cacheDir, $"page_{pageIndex}_{(int)96f}.png");
-                    var oldHighDpiCacheFile = Path.Combine(cacheDir, $"page_{pageIndex}_{(int)72f}.png");
-                    var oldLowDpiCacheFile = Path.Combine(cacheDir, $"page_{pageIndex}_{(int)36f}.png");
+                    var highDpiCacheFile = Path.Combine(cacheDir, $"page_{pageIndex}_{(int)150f}.jpg");
+                    var mediumDpiCacheFile = Path.Combine(cacheDir, $"page_{pageIndex}_{(int)96f}.jpg");
+                    var oldHighDpiCacheFile = Path.Combine(cacheDir, $"page_{pageIndex}_{(int)72f}.jpg");
+                    var oldLowDpiCacheFile = Path.Combine(cacheDir, $"page_{pageIndex}_{(int)36f}.jpg");
 
                     string imageFile = null;
                     if (File.Exists(highDpiCacheFile))

@@ -634,7 +634,7 @@ namespace Flashnote.Views
             try
             {
                 // キャッシュファイルのパスを生成
-                var cacheFileName = $"page_{pageIndex}_{(int)dpi}.png";
+                var cacheFileName = $"page_{pageIndex}_{(int)dpi}.jpg";
                 var cacheFilePath = Path.Combine(_tempDirectory, PAGE_CACHE_DIR, cacheFileName);
                 
                 // キャッシュファイルが存在するかチェック
@@ -709,23 +709,23 @@ namespace Flashnote.Views
                     // Bitmapのクローンを作成してスレッドセーフにする
                     using (var clonedBitmap = new System.Drawing.Bitmap(bitmap))
                     {
-                        // 高品質PNG保存設定
+                        // 高品質JPEG保存設定
                         var encoderParams = new System.Drawing.Imaging.EncoderParameters(1);
                         var qualityParam = new System.Drawing.Imaging.EncoderParameter(
-                            System.Drawing.Imaging.Encoder.Quality, 100L); // 最高品質
+                            System.Drawing.Imaging.Encoder.Quality, 85L); // 85%品質で圧縮
                         encoderParams.Param[0] = qualityParam;
                         
-                        // PNG用のImageCodecInfoを取得
-                        var pngCodec = System.Drawing.Imaging.ImageCodecInfo.GetImageEncoders()
-                            .FirstOrDefault(codec => codec.FormatID == System.Drawing.Imaging.ImageFormat.Png.Guid);
+                        // JPEG用のImageCodecInfoを取得
+                        var jpegCodec = System.Drawing.Imaging.ImageCodecInfo.GetImageEncoders()
+                            .FirstOrDefault(codec => codec.FormatID == System.Drawing.Imaging.ImageFormat.Jpeg.Guid);
                         
-                        if (pngCodec != null)
+                        if (jpegCodec != null)
                         {
-                            clonedBitmap.Save(tempFilePath, pngCodec, encoderParams);
+                            clonedBitmap.Save(tempFilePath, jpegCodec, encoderParams);
                         }
                         else
-                    {
-                        clonedBitmap.Save(tempFilePath, System.Drawing.Imaging.ImageFormat.Png);
+                        {
+                            clonedBitmap.Save(tempFilePath, System.Drawing.Imaging.ImageFormat.Jpeg);
                         }
                         
                         encoderParams.Dispose();
@@ -894,7 +894,7 @@ namespace Flashnote.Views
                 if (pageCanvas.Y <= preloadEnd && pageCanvas.Y + pageCanvas.Height >= preloadStart)
                 {
                     // 高画質キャッシュが存在しない場合のみ読み込み
-                    var cacheFileName = $"page_{i}_{(int)RENDER_DPI}.png";
+                    var cacheFileName = $"page_{i}_{(int)RENDER_DPI}.jpg";
                     var cacheFilePath = Path.Combine(_tempDirectory, PAGE_CACHE_DIR, cacheFileName);
                     
                     if (!File.Exists(cacheFilePath) && !_loadingPages.Contains(i))
@@ -983,9 +983,9 @@ namespace Flashnote.Views
                         try
                         {
                             // 150dpi高画質ファイルを優先、後方互換性のため旧ファイルもチェック
-                            var currentDpiFile = Path.Combine(_tempDirectory, PAGE_CACHE_DIR, $"page_{pageCanvas.PageIndex}_{(int)RENDER_DPI}.png");
-                            var oldHighDpiFile = Path.Combine(_tempDirectory, PAGE_CACHE_DIR, $"page_{pageCanvas.PageIndex}_72.png");
-                            var oldLowDpiFile = Path.Combine(_tempDirectory, PAGE_CACHE_DIR, $"page_{pageCanvas.PageIndex}_36.png");
+                            var currentDpiFile = Path.Combine(_tempDirectory, PAGE_CACHE_DIR, $"page_{pageCanvas.PageIndex}_{(int)RENDER_DPI}.jpg");
+                            var oldHighDpiFile = Path.Combine(_tempDirectory, PAGE_CACHE_DIR, $"page_{pageCanvas.PageIndex}_72.jpg");
+                            var oldLowDpiFile = Path.Combine(_tempDirectory, PAGE_CACHE_DIR, $"page_{pageCanvas.PageIndex}_36.jpg");
                             
                             string cacheFileToUse = null;
                             string qualityType = "";
@@ -1375,7 +1375,7 @@ namespace Flashnote.Views
                         string[] files;
                         lock (_fileAccessLock)
                         {
-                            files = Directory.GetFiles(cacheDir, "*.png");
+                            files = Directory.GetFiles(cacheDir, "*.jpg");
                         }
                         
                         var cutoffTime = DateTime.Now.AddDays(-7); // 7日以上古いファイルを削除
@@ -1394,14 +1394,14 @@ namespace Flashnote.Views
                                         var fileInfo = new FileInfo(file);
                                         
                                         // 古い低DPI（36dpi、72dpi、96dpi）ファイルを削除して150dpiでレンダリングを促進
-                                        if (fileName.Contains("_36.png") || fileName.Contains("_72.png") || fileName.Contains("_96.png"))
+                                        if (fileName.Contains("_36.jpg") || fileName.Contains("_72.jpg") || fileName.Contains("_96.jpg"))
                                         {
                                             // 対応する150dpiファイルが存在する場合は古いファイルを削除
                                             var pageIndexMatch = System.Text.RegularExpressions.Regex.Match(fileName, @"page_(\d+)_");
                                             if (pageIndexMatch.Success)
                                             {
                                                 var pageIndex = pageIndexMatch.Groups[1].Value;
-                                                var newHighDpiFile = Path.Combine(cacheDir, $"page_{pageIndex}_150.png");
+                                                var newHighDpiFile = Path.Combine(cacheDir, $"page_{pageIndex}_150.jpg");
                                                 
                                                 if (File.Exists(newHighDpiFile))
                                                 {

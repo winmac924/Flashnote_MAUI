@@ -5186,6 +5186,8 @@ namespace Flashnote.Services
         {
             try
             {
+                Debug.WriteLine($"=== 通常ノートへのカード保存開始: {noteName} ===");
+                
                 // cards.txtをアップロード
                 if (File.Exists(_cardsFilePath))
                 {
@@ -5214,6 +5216,11 @@ namespace Flashnote.Services
                     await _blobStorageService.SaveNoteAsync(uid, $"{cardId}.json", cardContent, cardPath);
                     Debug.WriteLine($"通常ノート: カードJSONファイルをBlob Storageにアップロード: {cardId}.json");
                 }
+                
+                // 画像ファイルをアップロード
+                await UploadImagesToRegularNoteAsync(uid, noteName, subFolder);
+                
+                Debug.WriteLine($"=== 通常ノートへのカード保存完了: {noteName} ===");
             }
             catch (Exception ex)
             {
@@ -5229,6 +5236,8 @@ namespace Flashnote.Services
         {
             try
             {
+                Debug.WriteLine($"=== 共有ノートへのカード保存開始: {noteName} ===");
+                
                 // 共有ノート情報を取得
                 var sharedInfo = sharedKeyService.GetSharedNoteInfo(subFolder);
                 if (sharedInfo == null)
@@ -5260,10 +5269,158 @@ namespace Flashnote.Services
                     await _blobStorageService.SaveSharedNoteFileAsync(sharedInfo.OriginalUserId, fullCardPath, $"{cardId}.json", cardContent);
                     Debug.WriteLine($"共有ノート: カードJSONファイルをBlob Storageにアップロード: {cardId}.json");
                 }
+                
+                // 画像ファイルをアップロード
+                await UploadImagesToSharedNoteAsync(noteName, subFolder, sharedKeyService);
+                
+                Debug.WriteLine($"=== 共有ノートへのカード保存完了: {noteName} ===");
             }
             catch (Exception ex)
             {
                 Debug.WriteLine($"共有ノートへのカード保存エラー: {ex.Message}");
+                throw;
+            }
+        }
+
+        /// <summary>
+        /// 通常ノートに画像ファイルをアップロード
+        /// </summary>
+        private async Task UploadImagesToRegularNoteAsync(string uid, string noteName, string subFolder)
+        {
+            try
+            {
+                Debug.WriteLine($"=== 通常ノートへの画像アップロード開始: {noteName} ===");
+                
+                // ローカルのimgフォルダのパスを取得
+                var localImgDir = Path.Combine(_tempExtractPath, "img");
+                Debug.WriteLine($"ローカルのimgフォルダのパス: {localImgDir}");
+                Debug.WriteLine($"ローカルのimgフォルダの存在確認: {Directory.Exists(localImgDir)}");
+                
+                if (!Directory.Exists(localImgDir))
+                {
+                    Debug.WriteLine("ローカル画像ディレクトリが存在しません");
+                    return;
+                }
+                
+                var localImgFiles = Directory.GetFiles(localImgDir, "img_*.jpg");
+                Debug.WriteLine($"ローカルの画像ファイル数: {localImgFiles.Length}");
+                
+                if (localImgFiles.Length == 0)
+                {
+                    Debug.WriteLine("アップロード対象の画像ファイルがありません");
+                    return;
+                }
+                
+                foreach (var imgFile in localImgFiles)
+                {
+                    try
+                    {
+                        var fileName = Path.GetFileName(imgFile);
+                        // iOS版の形式（img_########_######.jpg）をチェック
+                        if (Regex.IsMatch(fileName, @"^img_\d{8}_\d{6}\.jpg$"))
+                        {
+                            Debug.WriteLine($"画像ファイルのアップロード開始: {fileName}");
+                            var imgBytes = await File.ReadAllBytesAsync(imgFile);
+                            Debug.WriteLine($"画像ファイルのサイズ: {imgBytes.Length} バイト");
+                            
+                            // Base64エンコードしてアップロード
+                            var base64Content = Convert.ToBase64String(imgBytes);
+                            await _blobStorageService.UploadImageToNoteAsync(uid, noteName, fileName, base64Content, subFolder);
+                            Debug.WriteLine($"画像ファイルをアップロード完了: {fileName}");
+                        }
+                        else
+                        {
+                            Debug.WriteLine($"画像ファイル名の形式が正しくありません: {fileName}");
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        Debug.WriteLine($"画像ファイルのアップロード中にエラー: {imgFile}, エラー: {ex.Message}");
+                        Debug.WriteLine($"スタックトレース: {ex.StackTrace}");
+                    }
+                }
+                
+                Debug.WriteLine($"=== 通常ノートへの画像アップロード完了: {noteName} ===");
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"通常ノートへの画像アップロードエラー: {ex.Message}");
+                throw;
+            }
+        }
+
+        /// <summary>
+        /// 共有ノートに画像ファイルをアップロード
+        /// </summary>
+        private async Task UploadImagesToSharedNoteAsync(string noteName, string subFolder, SharedKeyService sharedKeyService)
+        {
+            try
+            {
+                Debug.WriteLine($"=== 共有ノートへの画像アップロード開始: {noteName} ===");
+                
+                // 共有ノート情報を取得
+                var sharedInfo = sharedKeyService.GetSharedNoteInfo(subFolder);
+                if (sharedInfo == null)
+                {
+                    Debug.WriteLine($"共有ノート情報が見つかりません: {subFolder}");
+                    return;
+                }
+                
+                // ローカルのimgフォルダのパスを取得
+                var localImgDir = Path.Combine(_tempExtractPath, "img");
+                Debug.WriteLine($"ローカルのimgフォルダのパス: {localImgDir}");
+                Debug.WriteLine($"ローカルのimgフォルダの存在確認: {Directory.Exists(localImgDir)}");
+                
+                if (!Directory.Exists(localImgDir))
+                {
+                    Debug.WriteLine("ローカル画像ディレクトリが存在しません");
+                    return;
+                }
+                
+                var localImgFiles = Directory.GetFiles(localImgDir, "img_*.jpg");
+                Debug.WriteLine($"ローカルの画像ファイル数: {localImgFiles.Length}");
+                
+                if (localImgFiles.Length == 0)
+                {
+                    Debug.WriteLine("アップロード対象の画像ファイルがありません");
+                    return;
+                }
+                
+                foreach (var imgFile in localImgFiles)
+                {
+                    try
+                    {
+                        var fileName = Path.GetFileName(imgFile);
+                        // iOS版の形式（img_########_######.jpg）をチェック
+                        if (Regex.IsMatch(fileName, @"^img_\d{8}_\d{6}\.jpg$"))
+                        {
+                            Debug.WriteLine($"画像ファイルのアップロード開始: {fileName}");
+                            var imgBytes = await File.ReadAllBytesAsync(imgFile);
+                            Debug.WriteLine($"画像ファイルのサイズ: {imgBytes.Length} バイト");
+                            
+                            // Base64エンコードしてアップロード
+                            var base64Content = Convert.ToBase64String(imgBytes);
+                            var fullImgPath = $"{sharedInfo.NotePath}/{noteName}";
+                            await _blobStorageService.UploadSharedImageAsync(sharedInfo.OriginalUserId, fileName, base64Content, fullImgPath);
+                            Debug.WriteLine($"画像ファイルをアップロード完了: {fileName}");
+                        }
+                        else
+                        {
+                            Debug.WriteLine($"画像ファイル名の形式が正しくありません: {fileName}");
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        Debug.WriteLine($"画像ファイルのアップロード中にエラー: {imgFile}, エラー: {ex.Message}");
+                        Debug.WriteLine($"スタックトレース: {ex.StackTrace}");
+                    }
+                }
+                
+                Debug.WriteLine($"=== 共有ノートへの画像アップロード完了: {noteName} ===");
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"共有ノートへの画像アップロードエラー: {ex.Message}");
                 throw;
             }
         }

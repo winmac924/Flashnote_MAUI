@@ -743,6 +743,35 @@ namespace Flashnote.Services
             }
         }
 
+        /// <summary>
+        /// ノート内のimgフォルダに画像ファイルをアップロード
+        /// </summary>
+        public async Task UploadImageToNoteAsync(string uid, string noteName, string imageName, string base64Content, string subFolder = null)
+        {
+            await EnsureInitializedAsync();
+            try
+            {
+                Debug.WriteLine($"ノート内画像のアップロード開始 - UID: {uid}, ノート名: {noteName}, 画像名: {imageName}, サブフォルダ: {subFolder ?? "なし"}");
+                
+                var containerClient = _blobServiceClient.GetBlobContainerClient(CONTAINER_NAME);
+                var userPath = GetUserPath(uid, subFolder);
+                var fullPath = $"{userPath}/{noteName}/img/{imageName}";
+
+                var blobClient = containerClient.GetBlobClient(fullPath);
+
+                // Base64文字列をバイト配列に変換してアップロード
+                var imageBytes = Convert.FromBase64String(base64Content);
+                using var stream = new MemoryStream(imageBytes);
+                await blobClient.UploadAsync(stream, overwrite: true);
+                Debug.WriteLine($"ノート内画像のアップロード完了 - サイズ: {imageBytes.Length} バイト, パス: {fullPath}");
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"ノート内画像のアップロード中にエラー: {ex.Message}");
+                throw;
+            }
+        }
+
         public async Task UploadImageBinaryAsync(string uid, string imageName, byte[] imageBytes, string subFolder = null)
         {
             await EnsureInitializedAsync();
@@ -763,6 +792,34 @@ namespace Flashnote.Services
             catch (Exception ex)
             {
                 Debug.WriteLine($"画像のバイナリアップロード中にエラー: {ex.Message}");
+                throw;
+            }
+        }
+
+        /// <summary>
+        /// 共有ノートに画像ファイルをアップロード
+        /// </summary>
+        public async Task UploadSharedImageAsync(string userId, string imageName, string base64Content, string folderPath)
+        {
+            await EnsureInitializedAsync();
+            try
+            {
+                Debug.WriteLine($"共有ノート画像のアップロード開始 - ユーザーID: {userId}, 画像名: {imageName}, フォルダパス: {folderPath}");
+                
+                var containerClient = _blobServiceClient.GetBlobContainerClient(CONTAINER_NAME);
+                var fullPath = $"{userId}/{folderPath}/img/{imageName}";
+
+                var blobClient = containerClient.GetBlobClient(fullPath);
+
+                // Base64文字列をバイト配列に変換してアップロード
+                var imageBytes = Convert.FromBase64String(base64Content);
+                using var stream = new MemoryStream(imageBytes);
+                await blobClient.UploadAsync(stream, overwrite: true);
+                Debug.WriteLine($"共有ノート画像のアップロード完了 - サイズ: {imageBytes.Length} バイト, パス: {fullPath}");
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"共有ノート画像のアップロード中にエラー: {ex.Message}");
                 throw;
             }
         }
