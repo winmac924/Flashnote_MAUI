@@ -94,6 +94,7 @@ namespace Flashnote.Services
 
         // Ctrlキー押下状態を管理
         private bool _isCtrlDown = false;
+        private bool _isShiftDown = false;
 
         public CardManager(string cardsPath, string tempPath, string cardId = null, string subFolder = null)
         {
@@ -4736,16 +4737,17 @@ namespace Flashnote.Services
                 Debug.WriteLine($"エディタ: {editor.AutomationId}");
                 Debug.WriteLine($"TextBox: {textBox.GetType().Name}");
                 
-                // ペースト処理中フラグを追加
+                // ペースト処理中フラグを追加（クラスレベルで管理）
                 var isPasting = false;
                 
                 // キーボードイベントを監視
-                textBox.KeyDown += (sender, args) =>
+                textBox.KeyDown += async (sender, args) =>
                 {
                     Debug.WriteLine($"=== KeyDownイベント ===");
                     Debug.WriteLine($"Key: {args.Key}");
                     Debug.WriteLine($"IsMenuKeyDown: {args.KeyStatus.IsMenuKeyDown}");
                     Debug.WriteLine($"現在の_isCtrlDown: {_isCtrlDown}");
+                    Debug.WriteLine($"現在の_isShiftDown: {_isShiftDown}");
                     Debug.WriteLine($"ペースト処理中: {isPasting}");
                     
                     if (args.Key == VirtualKey.Control)
@@ -4753,20 +4755,108 @@ namespace Flashnote.Services
                         _isCtrlDown = true;
                         Debug.WriteLine($"Ctrlキー押下: _isCtrlDown={_isCtrlDown}");
                     }
-                    // Ctrl+Vが押された場合のみペースト処理を実行
-                    if (args.Key == VirtualKey.V && _isCtrlDown && !isPasting)
+                    if (args.Key == VirtualKey.Shift)
                     {
-                        Debug.WriteLine($"=== Ctrl+V検出 ===");
+                        _isShiftDown = true;
+                        Debug.WriteLine($"Shiftキー押下: _isShiftDown={_isShiftDown}");
+                    }
+                    
+                    // Ctrl+VまたはCtrl+Shift+Vが押された場合にペースト処理を実行
+                    bool isCtrlVPressed = args.Key == VirtualKey.V && _isCtrlDown && !isPasting;
+                    bool isCtrlShiftVPressed = args.Key == VirtualKey.V && _isCtrlDown && _isShiftDown && !isPasting;
+                    
+                    if (isCtrlVPressed || isCtrlShiftVPressed)
+                    {
+                        Debug.WriteLine($"=== {(isCtrlShiftVPressed ? "Ctrl+Shift+V" : "Ctrl+V")}検出 ===");
                         Debug.WriteLine($"エディタ: {editor.AutomationId}");
                         Debug.WriteLine($"ペースト処理を開始します");
-                        args.Handled = true; // デフォルトのペーストをキャンセル
-                        isPasting = true; // ペースト処理中フラグを設定
-                        _ = HandleRichTextPasteAsync(editor).ContinueWith(t => 
+                        
+                        // デフォルトのペーストを確実にキャンセル
+                        args.Handled = true;
+                        isPasting = true;
+                        
+                        // 非同期処理を同期的に待機して、デフォルトのペースト処理との競合を防ぐ
+                        await HandleRichTextPasteAsync(editor);
+                        
+                        // ペースト処理完了後にフラグをリセット
+                        isPasting = false;
+                        Debug.WriteLine("ペースト処理完了: フラグをリセット");
+                    }
+                    
+                    // Ctrl+Bが押された場合に太字処理を実行
+                    if (args.Key == VirtualKey.B && _isCtrlDown)
+                    {
+                        Debug.WriteLine($"=== Ctrl+B検出 ===");
+                        Debug.WriteLine($"エディタ: {editor.AutomationId}");
+                        Debug.WriteLine($"太字処理を開始します");
+                        
+                        // デフォルトの処理をキャンセル
+                        args.Handled = true;
+                        
+                        // 現在のエディタに対して太字処理を実行
+                        InsertDecorationText(editor, "**", "**");
+                        // フォーカスを復元
+                        await Task.Delay(200);
+                        await RestoreFocusToEditor(editor);
+                    }
+                    
+                    // Ctrl+Rが押された場合に赤色処理を実行
+                    if (args.Key == VirtualKey.R && _isCtrlDown)
+                    {
+                        Debug.WriteLine($"=== Ctrl+R検出 ===");
+                        Debug.WriteLine($"エディタ: {editor.AutomationId}");
+                        Debug.WriteLine($"赤色処理を開始します");
+                        
+                        // デフォルトの処理をキャンセル
+                        args.Handled = true;
+                        
+                        // 現在のエディタに対して赤色処理を実行
+                        InsertDecorationText(editor, "{{red|", "}}");
+                        // フォーカスを復元
+                        await Task.Delay(200);
+                        await RestoreFocusToEditor(editor);
+                    }
+                    
+                    // Ctrl+Lが押された場合に青色処理を実行
+                    if (args.Key == VirtualKey.L && _isCtrlDown)
+                    {
+                        Debug.WriteLine($"=== Ctrl+L検出 ===");
+                        Debug.WriteLine($"エディタ: {editor.AutomationId}");
+                        Debug.WriteLine($"青色処理を開始します");
+                        
+                        // デフォルトの処理をキャンセル
+                        args.Handled = true;
+                        
+                        // 現在のエディタに対して青色処理を実行
+                        InsertDecorationText(editor, "{{blue|", "}}");
+                        // フォーカスを復元
+                        await Task.Delay(200);
+                        await RestoreFocusToEditor(editor);
+                    }
+                    
+                    // Ctrl+Kが押された場合に穴埋め処理を実行（基本カードの表面エディターでのみ）
+                    if (args.Key == VirtualKey.K && _isCtrlDown)
+                    {
+                        Debug.WriteLine($"=== Ctrl+K検出 ===");
+                        Debug.WriteLine($"エディタ: {editor.AutomationId}");
+                        Debug.WriteLine($"穴埋め処理を開始します");
+                        
+                        // デフォルトの処理をキャンセル
+                        args.Handled = true;
+                        
+                        // 基本カードの表面エディターでのみ穴埋めを挿入
+                        if (editor == _frontTextEditor)
                         {
-                            // ペースト処理完了後にフラグをリセット
-                            isPasting = false;
-                            Debug.WriteLine("ペースト処理完了: フラグをリセット");
-                        });
+                            Debug.WriteLine($"穴埋めを挿入: {editor.AutomationId}");
+                            InsertBlankText(editor);
+                            // フォーカスを復元
+                            await Task.Delay(200);
+                            await RestoreFocusToEditor(editor);
+                        }
+                        else
+                        {
+                            Debug.WriteLine("穴埋めは基本カードの表面でのみ使用できます");
+                        }
                     }
                 };
                 
@@ -4778,6 +4868,38 @@ namespace Flashnote.Services
                     {
                         _isCtrlDown = false;
                         Debug.WriteLine($"Ctrlキー離上: _isCtrlDown={_isCtrlDown}");
+                    }
+                    if (args.Key == VirtualKey.Shift)
+                    {
+                        _isShiftDown = false;
+                        Debug.WriteLine($"Shiftキー離上: _isShiftDown={_isShiftDown}");
+                    }
+                };
+                
+                // Pasteイベントも監視して、デフォルトのペースト処理を確実にキャンセル
+                textBox.Paste += (sender, args) =>
+                {
+                    Debug.WriteLine($"=== Pasteイベント ===");
+                    Debug.WriteLine($"ペースト処理中フラグ: {isPasting}");
+                    
+                    // カスタムペースト処理が実行中の場合は、デフォルトのペーストをキャンセル
+                    if (isPasting)
+                    {
+                        Debug.WriteLine("カスタムペースト処理中なので、デフォルトのペーストをキャンセルします");
+                        args.Handled = true;
+                    }
+                    else
+                    {
+                        // カスタム処理が実行されていない場合でも、Ctrl+VやCtrl+Shift+Vの場合は
+                        // デフォルトのペーストをキャンセルして、カスタム処理を実行
+                        Debug.WriteLine("カスタムペースト処理を実行します");
+                        args.Handled = true;
+                        isPasting = true;
+                        _ = HandleRichTextPasteAsync(editor).ContinueWith(t => 
+                        {
+                            isPasting = false;
+                            Debug.WriteLine("カスタムペースト処理完了: フラグをリセット");
+                        });
                     }
                 };
                 
@@ -4802,6 +4924,9 @@ namespace Flashnote.Services
                 Debug.WriteLine($"エディタ: {editor.AutomationId}");
                 Debug.WriteLine($"エディタの種類: {editor.GetType().Name}");
                 Debug.WriteLine($"統合ペースト処理開始");
+                
+                // ペースト処理開始前に少し遅延を入れて、デフォルトのペースト処理との競合を防ぐ
+                await Task.Delay(10);
                 
                 // リッチテキストをMarkdownに変換
                 var markdownText = await RichTextParser.GetRichTextAsMarkdownAsync();
@@ -4903,6 +5028,9 @@ namespace Flashnote.Services
             try
             {
                 Debug.WriteLine($"=== FallbackToPlainTextPaste開始 ===");
+                
+                // フォールバック処理開始前に少し遅延を入れて、デフォルトのペースト処理との競合を防ぐ
+                await Task.Delay(10);
                 
                 if (Clipboard.HasText)
                 {

@@ -56,10 +56,25 @@ namespace Flashnote
             _sharedKeyService = sharedKeyService;
             _fileWatcherService = fileWatcherService;
             _currentPath.Push(FolderPath);
+            
+            // サブフォルダ同期ボタンの初期状態を確認
+            Debug.WriteLine($"MainPageコンストラクタ - SubFolderSyncButton存在確認: {SubFolderSyncButton != null}");
+            if (SubFolderSyncButton != null)
+            {
+                Debug.WriteLine($"MainPageコンストラクタ - SubFolderSyncButton初期状態: {SubFolderSyncButton.IsVisible}");
+            }
+            
             LoadNotes();
             
             // 初期タイトルを設定
             UpdateAppTitle();
+            
+            // テスト用: サブフォルダ同期ボタンを強制的に表示
+            if (SubFolderSyncButton != null)
+            {
+                SubFolderSyncButton.IsVisible = true;
+                Debug.WriteLine("MainPageコンストラクタ - テスト用にサブフォルダ同期ボタンを強制表示");
+            }
             
             // ファイル監視イベントを設定
             SetupFileWatcher();
@@ -576,16 +591,50 @@ namespace Flashnote
                 var documentsPath = Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments);
                 var flashnotePath = Path.Combine(documentsPath, "Flashnote");
                 
+                Debug.WriteLine($"UpdateAppTitle - 現在のフォルダ: {currentFolder}");
+                Debug.WriteLine($"UpdateAppTitle - Flashnoteパス: {flashnotePath}");
+                Debug.WriteLine($"UpdateAppTitle - SubFolderSyncButton存在確認: {SubFolderSyncButton != null}");
+                
                 // ルートフォルダの場合は通常のタイトル
                 if (currentFolder.Equals(flashnotePath, StringComparison.OrdinalIgnoreCase))
                 {
                     AppTitleLabel.Text = "📚 Flashnote";
+                    // サブフォルダ同期ボタンを非表示
+                    if (SubFolderSyncButton != null)
+                    {
+                        SubFolderSyncButton.IsVisible = false;
+                        Debug.WriteLine("UpdateAppTitle - ルートフォルダ: サブフォルダ同期ボタンを非表示");
+                    }
                 }
                 else
                 {
                     // サブフォルダの場合はフォルダ名を追加
                     var folderName = Path.GetFileName(currentFolder);
                     AppTitleLabel.Text = $"📚 Flashnote - {folderName}";
+                    
+                    // 現在のフォルダがサブフォルダかどうかをチェック
+                    var currentSubFolder = CheckIfSharedFolder();
+                    Debug.WriteLine($"UpdateAppTitle - CheckIfSharedFolder結果: {currentSubFolder ?? "null"}");
+                    
+                    if (SubFolderSyncButton != null)
+                    {
+                        if (!string.IsNullOrEmpty(currentSubFolder))
+                        {
+                            // サブフォルダ同期ボタンを表示
+                            SubFolderSyncButton.IsVisible = true;
+                            Debug.WriteLine($"UpdateAppTitle - サブフォルダ同期ボタンを表示: {currentSubFolder}");
+                        }
+                        else
+                        {
+                            // 共有フォルダの場合は非表示
+                            SubFolderSyncButton.IsVisible = false;
+                            Debug.WriteLine("UpdateAppTitle - 共有フォルダ: サブフォルダ同期ボタンを非表示");
+                        }
+                    }
+                    else
+                    {
+                        Debug.WriteLine("UpdateAppTitle - SubFolderSyncButtonがnullです");
+                    }
                 }
             }
             catch (Exception ex)
@@ -593,6 +642,10 @@ namespace Flashnote
                 Debug.WriteLine($"タイトル更新中にエラー: {ex.Message}");
                 // エラーが発生した場合はデフォルトタイトルを設定
                 AppTitleLabel.Text = "📚 Flashnote";
+                if (SubFolderSyncButton != null)
+                {
+                    SubFolderSyncButton.IsVisible = false;
+                }
             }
         }
 
@@ -1511,6 +1564,103 @@ namespace Flashnote
             }
         }
 
+        /// <summary>
+        /// サブフォルダ同期ボタンがクリックされた時の処理
+        /// </summary>
+        private async void OnSubFolderSyncClicked(object sender, EventArgs e)
+        {
+            if (_isSyncing)
+            {
+                await DisplayAlert("同期中", "現在同期処理を実行中です。完了までお待ちください。", "OK");
+                return;
+            }
+
+            // ログイン状態をチェック
+            if (App.CurrentUser == null)
+            {
+                bool result = await DisplayAlert("ログインが必要", "同期機能を使用するにはログインが必要です。設定画面でログインしますか？", "はい", "いいえ");
+                if (result)
+                {
+                    await Shell.Current.GoToAsync("///SettingsPage");
+                }
+                return;
+            }
+
+            // 現在のフォルダがサブフォルダかどうかをチェック
+            var currentSubFolder = CheckIfSharedFolder();
+            if (string.IsNullOrEmpty(currentSubFolder))
+            {
+                await DisplayAlert("エラー", "現在のフォルダはサブフォルダではありません。", "OK");
+                return;
+            }
+
+            try
+            {
+                _isSyncing = true;
+                var syncButton = (Button)sender;
+                syncButton.IsEnabled = false;
+                syncButton.Text = "同期中...";
+
+                var uid = App.CurrentUser.Uid;
+                
+                // ネットワーク状態を事前チェック
+                var networkStateService = MauiProgram.Services?.GetService<NetworkStateService>();
+                if (networkStateService != null && !networkStateService.IsNetworkAvailable)
+                {
+                    await DisplayAlert("ネットワークエラー", "インターネット接続がありません。ネットワーク接続を確認してから再試行してください。", "OK");
+                    return;
+                }
+                
+                // Azure接続状態をリセット（ネットワーク状態変化に対応）
+                _blobStorageService.ResetConnectionState();
+                
+                // サブフォルダ内のノートのみを同期
+                await _cardSyncService.SyncSubFolderAsync(uid, currentSubFolder);
+
+                await DisplayAlert("同期完了", $"サブフォルダ「{currentSubFolder}」内のノートの同期が完了しました。", "OK");
+                
+                // 同期完了後にノートリストを更新
+                Debug.WriteLine("サブフォルダ同期完了、ノートリストを更新します");
+                LoadNotes();
+            }
+            catch (InvalidOperationException ex) when (ex.Message.Contains("オフライン") || ex.Message.Contains("接続"))
+            {
+                Debug.WriteLine($"ネットワーク関連エラー: {ex.Message}");
+                await DisplayAlert("ネットワークエラー", "インターネット接続に問題があります。ネットワーク接続を確認してから再試行してください。", "OK");
+            }
+            catch (TimeoutException ex)
+            {
+                Debug.WriteLine($"タイムアウトエラー: {ex.Message}");
+                await DisplayAlert("タイムアウトエラー", "サーバーへの接続がタイムアウトしました。ネットワーク接続を確認してから再試行してください。", "OK");
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"サブフォルダ同期中にエラー: {ex.Message}");
+                Debug.WriteLine($"エラータイプ: {ex.GetType().Name}");
+                Debug.WriteLine($"スタックトレース: {ex.StackTrace}");
+                
+                // エラーメッセージをユーザーフレンドリーに
+                string userMessage = ex.Message;
+                if (ex.Message.Contains("CancellationTokenSource has been disposed"))
+                {
+                    userMessage = "ネットワーク接続が不安定です。しばらく待ってから再試行してください。";
+                }
+                else if (ex.Message.Contains("Azure") || ex.Message.Contains("Blob"))
+                {
+                    userMessage = "クラウドストレージへの接続に問題があります。ネットワーク接続を確認してください。";
+                }
+                
+                await DisplayAlert("同期エラー", $"サブフォルダ同期中にエラーが発生しました: {userMessage}", "OK");
+            }
+            finally
+            {
+                _isSyncing = false;
+                var syncButton = (Button)sender;
+                syncButton.IsEnabled = true;
+                syncButton.Text = "📁 同期";
+            }
+        }
+
         private async void OnSharedKeyImportClicked(object sender, EventArgs e)
         {
             // ドロップダウンメニューを閉じる
@@ -1636,22 +1786,36 @@ namespace Flashnote
             var documentsPath = Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments);
             var flashnotePath = Path.Combine(documentsPath, "Flashnote");
             
+            Debug.WriteLine($"CheckIfSharedFolder - 現在のフォルダ: {currentFolder}");
+            Debug.WriteLine($"CheckIfSharedFolder - Flashnoteパス: {flashnotePath}");
+            
             string subFolder = null;
             if (currentFolder.StartsWith(flashnotePath, StringComparison.OrdinalIgnoreCase))
             {
                 var relativePath = Path.GetRelativePath(flashnotePath, currentFolder);
+                Debug.WriteLine($"CheckIfSharedFolder - 相対パス: {relativePath}");
+                
                 if (relativePath != "." && !relativePath.StartsWith("."))
                 {
                     subFolder = relativePath;
+                    Debug.WriteLine($"CheckIfSharedFolder - サブフォルダパス設定: {subFolder}");
                 }
             }
             
             // 共有フォルダの場合はnullを返す
-            if (!string.IsNullOrEmpty(subFolder) && _sharedKeyService.IsInSharedFolder("", subFolder))
+            if (!string.IsNullOrEmpty(subFolder))
             {
-                return null;
+                var isShared = _sharedKeyService.IsInSharedFolder("", subFolder);
+                Debug.WriteLine($"CheckIfSharedFolder - 共有フォルダチェック: {isShared}");
+                
+                if (isShared)
+                {
+                    Debug.WriteLine("CheckIfSharedFolder - 共有フォルダのためnullを返す");
+                    return null;
+                }
             }
             
+            Debug.WriteLine($"CheckIfSharedFolder - 最終結果: {subFolder ?? "null"}");
             return subFolder;
         }
 

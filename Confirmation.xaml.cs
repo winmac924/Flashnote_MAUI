@@ -151,19 +151,25 @@ namespace Flashnote
         // ノート数取得  
         private int GetTotalQuestions()
         {
-            string cardsFilePath = Path.Combine(tempExtractPath, "cards.txt");
-            if (File.Exists(cardsFilePath))
+            try
             {
-                Debug.WriteLine(cardsFilePath);
-                // `cards.txt` 1行目にノート数が記載されている  
-                var lines = File.ReadAllLines(cardsFilePath);
-
-                if (lines.Length > 0 && int.TryParse(lines[0], out int questionCount))
+                // cardsディレクトリ内のJSONファイル数をカウント
+                string cardsDir = Path.Combine(tempExtractPath, "cards");
+                if (Directory.Exists(cardsDir))
                 {
-                    return questionCount;
+                    var jsonFiles = Directory.GetFiles(cardsDir, "*.json");
+                    Debug.WriteLine($"cardsディレクトリ内のJSONファイル数: {jsonFiles.Length}");
+                    return jsonFiles.Length;
                 }
+                
+                Debug.WriteLine("cardsディレクトリが見つかりません");
+                return 0;
             }
-            return 0;
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"カード数取得中にエラー: {ex.Message}");
+                return 0;
+            }
         }
 
         // 学習開始  

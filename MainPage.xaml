@@ -110,6 +110,7 @@
                     <ColumnDefinition Width="Auto"/>
                     <ColumnDefinition Width="Auto"/>
                     <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="Auto"/>
                 </Grid.ColumnDefinitions>
                 
                 <!-- アプリタイトル -->
@@ -143,10 +144,20 @@
                         FontSize="20"
                         Style="{StaticResource ModernButtonStyle}"
                         Clicked="OnSyncClicked"/>
+                
+                <!-- サブフォルダ同期ボタン -->
+                <Button x:Name="SubFolderSyncButton"
+                        Text="📁 同期"
+                        Grid.Column="5"
+                        FontFamily="FluentUI"
+                        FontSize="16"
+                        Style="{StaticResource ModernButtonStyle}"
+                        IsVisible="False"
+                        Clicked="OnSubFolderSyncClicked"/>
                                 
                 <!-- ヘルプボタン -->
                 <Button Text="{x:Static fonts:FluentUI.question_circle_24_regular}"
-                        Grid.Column="5"
+                        Grid.Column="6"
                         FontFamily="FluentUI"
                         FontSize="18" 
                         Style="{StaticResource IconButtonStyle}"
@@ -156,7 +167,7 @@
                                 
                 <!-- 設定ボタン -->
                 <Button Text="{x:Static fonts:FluentUI.settings_24_regular}"
-                        Grid.Column="6"
+                        Grid.Column="7"
                         FontFamily="FluentUI"
                         FontSize="20" 
                         Style="{StaticResource IconButtonStyle}"
@@ -236,9 +247,10 @@
                                                    FontAttributes="Bold"
                                                    HorizontalOptions="Center"
                                                    VerticalOptions="End"
-                                                   Margin="10,0,10,30"
+                                                   Margin="10,0,10,10"
                                                    TextColor="Black"
-                                                   LineBreakMode="NoWrap"/>
+                                                   LineBreakMode="WordWrap"
+                                                   MaxLines="2"/>
                                         </Grid>
                                     </Frame>
 
@@ -270,9 +282,10 @@
                                                    FontAttributes="Bold"
                                                    HorizontalOptions="Center"
                                                    VerticalOptions="End"
-                                                   Margin="10,0,10,30"
+                                                   Margin="10,0,10,10"
                                                    TextColor="Black"
-                                                   LineBreakMode="NoWrap"/>
+                                                   LineBreakMode="WordWrap"
+                                                   MaxLines="2"/>
                                         </Grid>
                                     </Frame>
                                 </Grid>

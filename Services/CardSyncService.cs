@@ -1727,5 +1727,232 @@ namespace Flashnote.Services
                 throw;
             }
         }
+
+        /// <summary>
+        /// 特定のサブフォルダ内のノートのみを同期する
+        /// </summary>
+        public async Task SyncSubFolderAsync(string uid, string subFolder)
+        {
+            try
+            {
+                Debug.WriteLine($"=== サブフォルダ同期開始 ===");
+                Debug.WriteLine($"同期開始 - UID: {uid}, サブフォルダ: {subFolder}");
+
+                // 共有ノートの一覧を取得（除外用）
+                var sharedNotes = _sharedKeyService.GetSharedNotes();
+                var sharedNoteNames = sharedNotes.Keys.ToHashSet();
+                Debug.WriteLine($"共有ノート一覧（除外対象）: {string.Join(", ", sharedNoteNames)}");
+
+                // 指定されたサブフォルダ内のサーバーノートを取得
+                var serverNotes = await _blobStorageService.GetNoteListAsync(uid, subFolder);
+                Debug.WriteLine($"サーバーのサブフォルダノート数: {serverNotes.Count}");
+                foreach (var noteName in serverNotes)
+                {
+                    Debug.WriteLine($"  - {noteName}");
+                }
+
+                // ローカルノートの収集（指定されたサブフォルダのみ）
+                var localNotes = new List<(string noteName, string cardsPath)>();
+                var tempNotes = new List<(string noteName, string cardsPath)>();
+
+                var localBasePath = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments), "Flashnote", subFolder);
+                var tempBasePath = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Flashnote", subFolder);
+
+                Debug.WriteLine($"ローカルベースパス: {localBasePath}");
+                Debug.WriteLine($"tempベースパス: {tempBasePath}");
+
+                // ローカルのノートを収集（指定されたサブフォルダのみ）
+                if (Directory.Exists(localBasePath))
+                {
+                    Debug.WriteLine($"ローカルフォルダが存在します: {localBasePath}");
+                    foreach (var noteFolder in Directory.GetDirectories(localBasePath))
+                    {
+                        var noteName = Path.GetFileName(noteFolder);
+                        
+                        // 共有ノートは除外
+                        var fullNotePath = $"{subFolder}/{noteName}";
+                        if (sharedNoteNames.Contains(noteName) || sharedNoteNames.Contains(fullNotePath) || _sharedKeyService.IsInSharedFolder(noteName, subFolder))
+                        {
+                            Debug.WriteLine($"共有ノートを除外: {subFolder}/{noteName}");
+                            continue;
+                        }
+                        
+                        var cardsPath = Path.Combine(noteFolder, "cards.txt");
+                        if (File.Exists(cardsPath))
+                        {
+                            localNotes.Add((noteName, cardsPath));
+                            Debug.WriteLine($"ローカルノートを追加: {subFolder}/{noteName}");
+                        }
+                    }
+                }
+                else
+                {
+                    Debug.WriteLine($"ローカルフォルダが存在しません: {localBasePath}");
+                }
+
+                // tempフォルダのノートを収集（指定されたサブフォルダのみ）
+                if (Directory.Exists(tempBasePath))
+                {
+                    Debug.WriteLine($"tempフォルダが存在します: {tempBasePath}");
+                    foreach (var noteFolder in Directory.GetDirectories(tempBasePath))
+                    {
+                        var noteName = Path.GetFileName(noteFolder);
+                        if (noteName.EndsWith("_temp"))
+                        {
+                            noteName = noteName.Substring(0, noteName.Length - 5);
+                            
+                            // 共有ノートは除外
+                            var fullNotePath = $"{subFolder}/{noteName}";
+                            if (sharedNoteNames.Contains(noteName) || sharedNoteNames.Contains(fullNotePath) || _sharedKeyService.IsInSharedFolder(noteName, subFolder))
+                            {
+                                Debug.WriteLine($"共有ノートを除外（temp）: {subFolder}/{noteName}");
+                                continue;
+                            }
+                            
+                            var cardsPath = Path.Combine(noteFolder, "cards.txt");
+                            if (File.Exists(cardsPath))
+                            {
+                                tempNotes.Add((noteName, cardsPath));
+                                Debug.WriteLine($"tempノートを追加: {subFolder}/{noteName}");
+                            }
+                        }
+                    }
+                }
+                else
+                {
+                    Debug.WriteLine($"tempフォルダが存在しません: {tempBasePath}");
+                }
+
+                Debug.WriteLine($"収集したローカルノート数: {localNotes.Count}");
+                Debug.WriteLine($"収集したtempノート数: {tempNotes.Count}");
+                Debug.WriteLine($"サーバーノート数: {serverNotes.Count}");
+
+                // 1. 両方にあるノートの同期
+                Debug.WriteLine("1. 両方にあるノートの同期開始");
+                foreach (var noteName in serverNotes)
+                {
+                    // 共有ノートは除外
+                    if (sharedNoteNames.Contains(noteName))
+                    {
+                        Debug.WriteLine($"サーバーの共有ノートを同期から除外: {noteName}");
+                        continue;
+                    }
+                    
+                    var localNote = localNotes.FirstOrDefault(n => n.noteName == noteName);
+                    var tempNote = tempNotes.FirstOrDefault(n => n.noteName == noteName);
+
+                    if (localNote.noteName != null || tempNote.noteName != null)
+                    {
+                        Debug.WriteLine($"両方にあるノートを同期: {noteName}");
+                        await SyncNoteAsync(uid, noteName, subFolder);
+                    }
+                }
+
+                // 2. サーバーにのみあるノートのダウンロード
+                Debug.WriteLine("2. サーバーにのみあるノートのダウンロード開始");
+                foreach (var noteName in serverNotes)
+                {
+                    // 共有ノートは除外
+                    if (sharedNoteNames.Contains(noteName))
+                    {
+                        Debug.WriteLine($"サーバーの共有ノートをダウンロードから除外: {noteName}");
+                        continue;
+                    }
+                    
+                    // ローカルに存在するかチェック
+                    var existsLocally = localNotes.Any(n => n.noteName == noteName) ||
+                                       tempNotes.Any(n => n.noteName == noteName);
+                    
+                    if (!existsLocally)
+                    {
+                        Debug.WriteLine($"サーバーにのみあるノートをダウンロード: {noteName}");
+                        await SyncNoteAsync(uid, noteName, subFolder);
+                    }
+                }
+
+                // 3. ローカルにのみあるノートのアップロード
+                Debug.WriteLine("3. ローカルにのみあるノートのアップロード開始");
+                var allLocalNotes = localNotes.Concat(tempNotes).DistinctBy(n => n.noteName);
+                foreach (var localNote in allLocalNotes)
+                {
+                    // 共有ノートは除外
+                    var fullNotePath = $"{subFolder}/{localNote.noteName}";
+                    if (sharedNoteNames.Contains(localNote.noteName) || sharedNoteNames.Contains(fullNotePath) || _sharedKeyService.IsInSharedFolder(localNote.noteName, subFolder))
+                    {
+                        Debug.WriteLine($"ローカルの共有ノートをアップロードから除外: {localNote.noteName}");
+                        continue;
+                    }
+                    
+                    // サーバーに存在するかチェック
+                    var existsOnServer = serverNotes.Contains(localNote.noteName);
+                    
+                    if (!existsOnServer)
+                    {
+                        Debug.WriteLine($"ローカルにのみあるノートをアップロード開始: {localNote.noteName}");
+                        Debug.WriteLine($"ノートのパス: {localNote.cardsPath}");
+                        
+                        var localContent = await File.ReadAllTextAsync(localNote.cardsPath);
+                        Debug.WriteLine($"cards.txtの内容: {localContent}");
+                        
+                        // cards.txtのパスからcardsディレクトリのパスを取得
+                        var cardsDir = Path.Combine(Path.GetDirectoryName(localNote.cardsPath), "cards");
+                        Debug.WriteLine($"カードディレクトリのパス: {cardsDir}");
+
+                        if (Directory.Exists(cardsDir))
+                        {
+                            var jsonFiles = Directory.GetFiles(cardsDir, "*.json");
+                            Debug.WriteLine($"見つかったJSONファイル数: {jsonFiles.Length}");
+                            var cardCount = jsonFiles.Length;
+                            var cardLines = new List<string>();
+
+                            foreach (var jsonFile in jsonFiles)
+                            {
+                                try
+                                {
+                                    var jsonContent = await File.ReadAllTextAsync(jsonFile);
+                                    var jsonFileName = Path.GetFileName(jsonFile);
+                                    var uuid = Path.GetFileNameWithoutExtension(jsonFileName);
+                                    var lastModified = File.GetLastWriteTime(jsonFile);
+                                    cardLines.Add($"{uuid},{lastModified:yyyy-MM-dd HH:mm:ss}");
+                                    Debug.WriteLine($"カード情報を準備: {uuid}, {lastModified:yyyy-MM-dd HH:mm:ss}");
+
+                                    // サブフォルダのパスを正しく構築
+                                    var uploadPath = $"{subFolder}/{localNote.noteName}/cards";
+                                    
+                                    await _blobStorageService.SaveNoteAsync(uid, jsonFileName, jsonContent, uploadPath);
+                                    Debug.WriteLine($"カードファイルをアップロード: {jsonFileName} -> {uploadPath}");
+                                }
+                                catch (Exception ex)
+                                {
+                                    Debug.WriteLine($"カードファイルのアップロード中にエラー: {jsonFile}, エラー: {ex.Message}");
+                                }
+                            }
+
+                            // cards.txtをアップロード
+                            var cardsContent = $"{cardCount}\n{string.Join("\n", cardLines)}";
+                            await _blobStorageService.SaveNoteAsync(uid, localNote.noteName, cardsContent, subFolder);
+                            Debug.WriteLine($"cards.txtをアップロード: {localNote.noteName} -> サブフォルダ: {subFolder}");
+                        }
+                        else
+                        {
+                            Debug.WriteLine($"カードディレクトリが見つかりません: {cardsDir}");
+                        }
+                        
+                        Debug.WriteLine($"ローカルにのみあるノートのアップロード完了: {localNote.noteName}");
+                    }
+                    else
+                    {
+                        Debug.WriteLine($"ノート '{localNote.noteName}' はサーバーにも存在するため、アップロードをスキップ");
+                    }
+                }
+
+                Debug.WriteLine($"=== サブフォルダ同期完了: {subFolder} ===");
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"サブフォルダ同期中にエラー: {ex.Message}");
+                throw;
+            }
+        }
     }
 } 
