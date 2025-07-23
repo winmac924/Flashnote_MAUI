@@ -33,6 +33,19 @@
         <!-- 問題表示エリア（スクロール対応） -->
         <ScrollView Grid.Row="0" Margin="0,0,0,10">
             <VerticalStackLayout Spacing="10" Padding="10">
+                <!-- 問題数表示 -->
+                <Label x:Name="QuestionNumberLabel"
+                       Text="問題 1 / 10"
+                       FontSize="16"
+                       FontAttributes="Bold"
+                       HorizontalOptions="Center"
+                       Margin="0,0,0,10">
+                    <Label.TextColor>
+                        <AppThemeBinding Light="{StaticResource TextLight}" 
+                                        Dark="{StaticResource TextDark}" />
+                    </Label.TextColor>
+                </Label>
+                
                 <!-- 問題表示エリア -->
                 <Grid x:Name="QuestionContainer">
 

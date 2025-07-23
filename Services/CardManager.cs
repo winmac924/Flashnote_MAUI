@@ -5316,34 +5316,27 @@ namespace Flashnote.Services
             {
                 Debug.WriteLine($"=== 通常ノートへのカード保存開始: {noteName} ===");
                 
-                // cards.txtをアップロード
-                if (File.Exists(_cardsFilePath))
-                {
-                    var cardsContent = await File.ReadAllTextAsync(_cardsFilePath);
-                    await _blobStorageService.SaveNoteAsync(uid, noteName, cardsContent, subFolder);
-                    Debug.WriteLine($"通常ノート: cards.txtをBlob Storageにアップロード: {noteName}");
-                }
-                
-                // 新しく保存されたカードのJSONファイルをアップロード
+                // 新しく保存されたカードの情報を取得
                 var jsonElement = JsonSerializer.Deserialize<JsonElement>(_cards.Last());
                 var cardId = jsonElement.GetProperty("id").GetString();
                 var cardJsonPath = Path.Combine(_tempExtractPath, "cards", $"{cardId}.json");
                 
+                // カードのJSONコンテンツを取得
+                string cardContent = null;
                 if (File.Exists(cardJsonPath))
                 {
-                    var cardContent = await File.ReadAllTextAsync(cardJsonPath);
-                    string cardPath;
-                    if (!string.IsNullOrEmpty(subFolder))
-                    {
-                        cardPath = $"{subFolder}/{noteName}/cards";
-                    }
-                    else
-                    {
-                        cardPath = $"{noteName}/cards";
-                    }
-                    await _blobStorageService.SaveNoteAsync(uid, $"{cardId}.json", cardContent, cardPath);
-                    Debug.WriteLine($"通常ノート: カードJSONファイルをBlob Storageにアップロード: {cardId}.json");
+                    cardContent = await File.ReadAllTextAsync(cardJsonPath);
                 }
+                
+                if (string.IsNullOrEmpty(cardContent))
+                {
+                    Debug.WriteLine($"カードJSONファイルが見つかりません: {cardJsonPath}");
+                    throw new FileNotFoundException($"カードJSONファイルが見つかりません: {cardId}");
+                }
+                
+                // Append機能を使用してカードを追加
+                await _blobStorageService.AppendCardToNoteAsync(uid, noteName, cardId, cardContent, subFolder);
+                Debug.WriteLine($"通常ノート: カードをAppend機能で追加: {cardId}");
                 
                 // 画像ファイルをアップロード
                 await UploadImagesToRegularNoteAsync(uid, noteName, subFolder);
@@ -5376,27 +5369,28 @@ namespace Flashnote.Services
                 
                 Debug.WriteLine($"共有ノート情報 - 元UID: {sharedInfo.OriginalUserId}, パス: {sharedInfo.NotePath}");
                 
-                // cards.txtをアップロード
-                if (File.Exists(_cardsFilePath))
-                {
-                    var cardsContent = await File.ReadAllTextAsync(_cardsFilePath);
-                    var fullNotePath = $"{sharedInfo.NotePath}/{noteName}";
-                    await _blobStorageService.SaveSharedNoteFileAsync(sharedInfo.OriginalUserId, fullNotePath, "cards.txt", cardsContent);
-                    Debug.WriteLine($"共有ノート: cards.txtをBlob Storageにアップロード: {fullNotePath}");
-                }
-                
-                // 新しく保存されたカードのJSONファイルをアップロード
+                // 新しく保存されたカードの情報を取得
                 var jsonElement = JsonSerializer.Deserialize<JsonElement>(_cards.Last());
                 var cardId = jsonElement.GetProperty("id").GetString();
                 var cardJsonPath = Path.Combine(_tempExtractPath, "cards", $"{cardId}.json");
                 
+                // カードのJSONコンテンツを取得
+                string cardContent = null;
                 if (File.Exists(cardJsonPath))
                 {
-                    var cardContent = await File.ReadAllTextAsync(cardJsonPath);
-                    var fullCardPath = $"{sharedInfo.NotePath}/{noteName}/cards";
-                    await _blobStorageService.SaveSharedNoteFileAsync(sharedInfo.OriginalUserId, fullCardPath, $"{cardId}.json", cardContent);
-                    Debug.WriteLine($"共有ノート: カードJSONファイルをBlob Storageにアップロード: {cardId}.json");
+                    cardContent = await File.ReadAllTextAsync(cardJsonPath);
                 }
+                
+                if (string.IsNullOrEmpty(cardContent))
+                {
+                    Debug.WriteLine($"カードJSONファイルが見つかりません: {cardJsonPath}");
+                    throw new FileNotFoundException($"カードJSONファイルが見つかりません: {cardId}");
+                }
+                
+                // Append機能を使用してカードを追加
+                var fullNotePath = $"{sharedInfo.NotePath}/{noteName}";
+                await _blobStorageService.AppendCardToSharedNoteAsync(sharedInfo.OriginalUserId, fullNotePath, cardId, cardContent);
+                Debug.WriteLine($"共有ノート: カードをAppend機能で追加: {cardId}");
                 
                 // 画像ファイルをアップロード
                 await UploadImagesToSharedNoteAsync(noteName, subFolder, sharedKeyService);
@@ -5551,6 +5545,76 @@ namespace Flashnote.Services
                 Debug.WriteLine($"共有ノートへの画像アップロードエラー: {ex.Message}");
                 throw;
             }
+        }
+
+        /// <summary>
+        /// cards.txtファイルをパースする
+        /// </summary>
+        private async Task<List<CardInfo>> ParseCardsFile(string content)
+        {
+            try
+            {
+                Debug.WriteLine($"ParseCardsFile開始 - コンテンツ長: {content.Length}");
+                var cards = new List<CardInfo>();
+                var lines = content.Split('\n', StringSplitOptions.RemoveEmptyEntries);
+                Debug.WriteLine($"行数: {lines.Length}");
+
+                // 1行目が数字のみの場合はカード数なのでスキップ
+                int startIndex = 0;
+                if (lines.Length > 0 && int.TryParse(lines[0], out _))
+                {
+                    startIndex = 1;
+                }
+
+                for (int i = startIndex; i < lines.Length; i++)
+                {
+                    try
+                    {
+                        // 行の末尾の改行文字を削除
+                        var line = lines[i].TrimEnd('\r', '\n');
+                        Debug.WriteLine($"行 {i} をパース: {line}");
+                        var parts = line.Split(',');
+                        if (parts.Length >= 2)
+                        {
+                            var card = new CardInfo
+                            {
+                                Uuid = parts[0],
+                                LastModified = DateTime.ParseExact(parts[1].Trim(), "yyyy-MM-dd HH:mm:ss", null),
+                                IsDeleted = parts.Length >= 3 && parts[2].Trim() == "deleted"
+                            };
+                            cards.Add(card);
+                            Debug.WriteLine($"カード情報をパース: UUID={card.Uuid}, 最終更新={card.LastModified}, 削除フラグ={card.IsDeleted}");
+                        }
+                        else
+                        {
+                            Debug.WriteLine($"行 {i} のパースに失敗: カンマ区切りの値が不足しています");
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        Debug.WriteLine($"カードのパースに失敗: {lines[i]}, エラー: {ex.Message}");
+                    }
+                }
+
+                Debug.WriteLine($"ParseCardsFile完了 - パースしたカード数: {cards.Count}");
+                return cards;
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"カードファイルのパース中にエラー: {ex.Message}");
+                throw;
+            }
+        }
+
+        /// <summary>
+        /// カード情報を表すクラス
+        /// </summary>
+        private class CardInfo
+        {
+            public string Uuid { get; set; }
+            public DateTime LastModified { get; set; }
+            public string Content { get; set; }
+            public bool IsDeleted { get; set; }
         }
     }
 } 

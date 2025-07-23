@@ -270,18 +270,6 @@ public class GitHubUpdateService
                 Detail = "ファイルの準備中"
             });
             
-            // 差分更新ファイルの場合
-            if (fileName.EndsWith(".diff", StringComparison.OrdinalIgnoreCase))
-            {
-                progress?.Report(new DownloadProgress 
-                { 
-                    Status = "差分更新を適用中...",
-                    ProgressPercentage = 1.0,
-                    Detail = "差分を適用しています"
-                });
-                return await ApplyDifferentialUpdateAsync(tempPath, progress);
-            }
-            
             // EXEファイルの場合、直接実行
             if (fileName.EndsWith(".exe", StringComparison.OrdinalIgnoreCase))
             {
@@ -338,38 +326,6 @@ public class GitHubUpdateService
             len = len / 1024;
         }
         return $"{len:0.##} {sizes[order]}";
-    }
-
-    /// <summary>
-    /// 差分更新を適用
-    /// </summary>
-    private async Task<bool> ApplyDifferentialUpdateAsync(string diffPath, IProgress<DownloadProgress>? progress)
-    {
-        try
-        {
-            // DifferentialUpdateServiceを使用して差分を適用
-            var differentialService = new DifferentialUpdateService(_httpClient, _logger);
-            
-            // ファイル名からバージョン情報を抽出
-            var fileName = Path.GetFileName(diffPath);
-            var versionMatch = System.Text.RegularExpressions.Regex.Match(fileName, @"Flashnote_MAUI_(.+)_to_(.+)\.diff");
-            
-            if (!versionMatch.Success)
-            {
-                _logger.LogError("差分ファイル名からバージョン情報を抽出できませんでした: {FileName}", fileName);
-                return false;
-            }
-            
-            var currentVersion = versionMatch.Groups[1].Value;
-            var targetVersion = versionMatch.Groups[2].Value;
-            
-            return await differentialService.ApplyDifferentialUpdateAsync(currentVersion, targetVersion, progress);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "差分更新の適用中にエラーが発生しました");
-            return false;
-        }
     }
 
     private async Task<bool> InstallExeAsync(string exePath)

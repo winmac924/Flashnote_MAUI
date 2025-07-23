@@ -187,6 +187,9 @@ namespace Flashnote
             {
                 await Task.Delay(100); // 少し遅延させてから処理を実行
                 
+                // 問題数を初期化
+                UpdateQuestionNumber();
+                
                 // 現在のカードを再表示して状態を復元
                 if (sortedCards != null && sortedCards.Count > 0 && currentIndex < sortedCards.Count)
                 {
@@ -391,6 +394,9 @@ namespace Flashnote
 
                 var card = sortedCards[currentIndex];
                 Debug.WriteLine($"Current card id: {card.id}, type: {card.type}");
+
+                // 問題数を更新
+                UpdateQuestionNumber();
 
                 // レイアウトの初期化
                 BasicCardLayout.IsVisible = false;
@@ -1656,6 +1662,9 @@ namespace Flashnote
             
             Debug.WriteLine("復習カードを次に配置完了");
             Debug.WriteLine($"新しい総カード数: {sortedCards.Count}");
+            
+            // 問題数を更新
+            UpdateQuestionNumber();
         }
 
         // 復習が必要なカードを表示
@@ -1676,6 +1685,10 @@ namespace Flashnote
                 showAnswer = false;
                 
                 Debug.WriteLine($"復習カードで継続: {sortedCards.Count}件");
+                
+                // 問題数を更新
+                UpdateQuestionNumber();
+                
                 await DisplayCard();
             }
             else
@@ -2512,6 +2525,29 @@ namespace Flashnote
                 Correct.IsVisible = false;
                 Incorrect.IsVisible = false;
                 SeparatorGrid.IsVisible = false;
+            }
+        }
+
+        // 問題数を更新
+        private void UpdateQuestionNumber()
+        {
+            try
+            {
+                if (sortedCards != null && sortedCards.Count > 0)
+                {
+                    int currentQuestionNumber = currentIndex + 1;
+                    int totalQuestions = sortedCards.Count;
+                    QuestionNumberLabel.Text = $"問題 {currentQuestionNumber} / {totalQuestions}";
+                    Debug.WriteLine($"問題数を更新: {currentQuestionNumber} / {totalQuestions}");
+                }
+                else
+                {
+                    QuestionNumberLabel.Text = "問題 0 / 0";
+                }
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"問題数更新エラー: {ex.Message}");
             }
         }
 

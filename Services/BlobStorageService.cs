@@ -1672,5 +1672,180 @@ namespace Flashnote.Services
                 throw;
             }
         }
+
+        /// <summary>
+        /// カードをノートに追加（競合回避機能付き）
+        /// </summary>
+        public async Task AppendCardToNoteAsync(string uid, string noteName, string cardId, string cardContent, string subFolder = null)
+        {
+            CancellationTokenSource cancellationTokenSource = null;
+            try
+            {
+                await EnsureInitializedAsync();
+                Debug.WriteLine($"カード追加開始 - UID: {uid}, ノート名: {noteName}, カードID: {cardId}, サブフォルダ: {subFolder ?? "なし"}");
+                
+                var containerClient = _blobServiceClient.GetBlobContainerClient(CONTAINER_NAME);
+                var userPath = GetUserPath(uid, subFolder);
+                var fullPath = $"{userPath}/{noteName}/cards.txt";
+
+                var blobClient = containerClient.GetBlobClient(fullPath);
+                cancellationTokenSource = NetworkOperationCancellationManager.CreateCancellationTokenSource(TimeSpan.FromSeconds(30));
+
+                // 既存のコンテンツを取得してカード数を更新
+                var existingContent = await GetNoteContentAsync(uid, noteName, subFolder);
+                var lines = existingContent?.Split('\n', StringSplitOptions.RemoveEmptyEntries) ?? new string[0];
+                
+                int cardCount = 0;
+                if (lines.Length > 0 && int.TryParse(lines[0], out cardCount))
+                {
+                    cardCount++;
+                }
+                else
+                {
+                    cardCount = 1;
+                }
+                
+                // 新しいカード行を追加
+                var newCardLine = $"\n{cardId},{DateTime.Now:yyyy-MM-dd HH:mm:ss}";
+                
+                // カード数を更新した新しいコンテンツを作成
+                var updatedContent = $"{cardCount}\n{string.Join("\n", lines.Skip(1))}{newCardLine}";
+                
+                using var stream = new MemoryStream(System.Text.Encoding.UTF8.GetBytes(updatedContent));
+                await blobClient.UploadAsync(stream, overwrite: true, cancellationToken: cancellationTokenSource.Token);
+                Debug.WriteLine($"cards.txtを更新: {fullPath}, カード数: {cardCount}");
+                
+                // カードのJSONファイルを個別に保存
+                var cardJsonPath = $"{userPath}/{noteName}/cards/{cardId}.json";
+                var cardBlobClient = containerClient.GetBlobClient(cardJsonPath);
+                using var cardStream = new MemoryStream(System.Text.Encoding.UTF8.GetBytes(cardContent));
+                await cardBlobClient.UploadAsync(cardStream, overwrite: true, cancellationToken: cancellationTokenSource.Token);
+                
+                Debug.WriteLine($"カード追加完了 - カードID: {cardId}, パス: {cardJsonPath}");
+                
+                // 保存成功時に未同期記録から削除
+                try
+                {
+                    var unsyncService = MauiProgram.Services.GetService<UnsynchronizedNotesService>();
+                    unsyncService?.RemoveUnsynchronizedNote(noteName, subFolder);
+                    Debug.WriteLine($"未同期記録から削除: {noteName}");
+                }
+                catch (Exception ex)
+                {
+                    Debug.WriteLine($"未同期記録削除エラー: {ex.Message}");
+                }
+            }
+            catch (InvalidOperationException)
+            {
+                // オフライン状態の場合は再スローして呼び出し元で適切に処理
+                throw;
+            }
+            catch (OperationCanceledException)
+            {
+                throw new TimeoutException("カード追加がタイムアウトしました。ネットワーク接続を確認してください。");
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"カード追加中にエラー: {ex.Message}");
+                throw new InvalidOperationException($"カード追加に失敗しました: {ex.Message}", ex);
+            }
+            finally
+            {
+                // 安全にCancellationTokenSourceをクリーンアップ
+                if (cancellationTokenSource != null)
+                {
+                    try
+                    {
+                        NetworkOperationCancellationManager.RemoveCancellationTokenSource(cancellationTokenSource);
+                        cancellationTokenSource.Dispose();
+                    }
+                    catch (Exception disposeEx)
+                    {
+                        Debug.WriteLine($"CancellationTokenSourceクリーンアップエラー: {disposeEx.Message}");
+                    }
+                }
+            }
+        }
+
+        /// <summary>
+        /// 共有ノートにカードを追加（競合回避機能付き）
+        /// </summary>
+        public async Task AppendCardToSharedNoteAsync(string originalUserId, string notePath, string cardId, string cardContent)
+        {
+            CancellationTokenSource cancellationTokenSource = null;
+            try
+            {
+                await EnsureInitializedAsync();
+                Debug.WriteLine($"共有ノートカード追加開始 - 元UID: {originalUserId}, ノートパス: {notePath}, カードID: {cardId}");
+                
+                var containerClient = _blobServiceClient.GetBlobContainerClient(CONTAINER_NAME);
+                var fullPath = $"{originalUserId}/{notePath}/cards.txt";
+
+                var blobClient = containerClient.GetBlobClient(fullPath);
+                cancellationTokenSource = NetworkOperationCancellationManager.CreateCancellationTokenSource(TimeSpan.FromSeconds(30));
+
+                // 既存ファイルに追記
+                var existingContent = await GetSharedNoteFileAsync(originalUserId, notePath, "cards.txt");
+                var lines = existingContent?.Split('\n', StringSplitOptions.RemoveEmptyEntries) ?? new string[0];
+                
+                int cardCount = 0;
+                if (lines.Length > 0 && int.TryParse(lines[0], out cardCount))
+                {
+                    cardCount++;
+                }
+                else
+                {
+                    cardCount = 1;
+                }
+                
+                // 新しいカード行を追加
+                var newCardLine = $"\n{cardId},{DateTime.Now:yyyy-MM-dd HH:mm:ss}";
+                
+                // カード数を更新した新しいコンテンツを作成
+                var updatedContent = $"{cardCount}\n{string.Join("\n", lines.Skip(1))}{newCardLine}";
+                
+                using var stream = new MemoryStream(System.Text.Encoding.UTF8.GetBytes(updatedContent));
+                await blobClient.UploadAsync(stream, overwrite: true, cancellationToken: cancellationTokenSource.Token);
+                Debug.WriteLine($"共有ノートcards.txtを更新: {fullPath}, カード数: {cardCount}");
+                
+                // カードのJSONファイルを個別に保存
+                var cardJsonPath = $"{originalUserId}/{notePath}/cards/{cardId}.json";
+                var cardBlobClient = containerClient.GetBlobClient(cardJsonPath);
+                using var cardStream = new MemoryStream(System.Text.Encoding.UTF8.GetBytes(cardContent));
+                await cardBlobClient.UploadAsync(cardStream, overwrite: true, cancellationToken: cancellationTokenSource.Token);
+                
+                Debug.WriteLine($"共有ノートカード追加完了 - カードID: {cardId}, パス: {cardJsonPath}");
+            }
+            catch (InvalidOperationException)
+            {
+                // オフライン状態の場合は再スローして呼び出し元で適切に処理
+                throw;
+            }
+            catch (OperationCanceledException)
+            {
+                throw new TimeoutException("共有ノートカード追加がタイムアウトしました。ネットワーク接続を確認してください。");
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"共有ノートカード追加中にエラー: {ex.Message}");
+                throw new InvalidOperationException($"共有ノートカード追加に失敗しました: {ex.Message}", ex);
+            }
+            finally
+            {
+                // 安全にCancellationTokenSourceをクリーンアップ
+                if (cancellationTokenSource != null)
+                {
+                    try
+                    {
+                        NetworkOperationCancellationManager.RemoveCancellationTokenSource(cancellationTokenSource);
+                        cancellationTokenSource.Dispose();
+                    }
+                    catch (Exception disposeEx)
+                    {
+                        Debug.WriteLine($"CancellationTokenSourceクリーンアップエラー: {disposeEx.Message}");
+                    }
+                }
+            }
+        }
     }
 } 

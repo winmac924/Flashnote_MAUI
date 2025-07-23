@@ -135,6 +135,16 @@ namespace Flashnote
             public string ImageInfo { get; set; }
             public bool HasImage { get; set; }
             public string LastModified { get; set; }
+            
+            // 同期用のプロパティ
+            public string Uuid => Id;
+            public DateTime LastModifiedDateTime 
+            { 
+                get => DateTime.TryParse(LastModified, out var dt) ? dt : DateTime.Now;
+                set => LastModified = value.ToString("yyyy-MM-dd HH:mm:ss");
+            }
+            public string Content { get; set; }
+            public bool IsDeleted { get; set; }
         }
 
         public Edit(string notePath, string tempPath)
@@ -1992,13 +2002,42 @@ namespace Flashnote
         {
             try
             {
-                // cards.txtをアップロード
-                if (File.Exists(cardsFilePath))
+                // サーバーから既存のcards.txtを取得
+                var existingServerContent = await _blobStorageService.GetNoteContentAsync(uid, noteName, subFolder);
+                var existingCards = new List<CardInfo>();
+                
+                if (!string.IsNullOrEmpty(existingServerContent))
                 {
-                    var cardsContent = await File.ReadAllTextAsync(cardsFilePath);
-                    await _blobStorageService.SaveNoteAsync(uid, noteName, cardsContent, subFolder);
-                    Debug.WriteLine($"通常ノート: cards.txtをBlob Storageにアップロード: {noteName}");
+                    existingCards = await ParseCardsFile(existingServerContent);
+                    Debug.WriteLine($"サーバーから既存のカード数: {existingCards.Count}");
                 }
+                
+                // 編集されたカードの情報を更新
+                var existingCard = existingCards.FirstOrDefault(c => c.Id == editCardId);
+                if (existingCard != null)
+                {
+                    existingCard.LastModifiedDateTime = DateTime.Now;
+                    Debug.WriteLine($"既存カードの更新日時を更新: {editCardId}");
+                }
+                else
+                {
+                    // 新規カードの場合
+                    var newCard = new CardInfo
+                    {
+                        Id = editCardId,
+                        LastModifiedDateTime = DateTime.Now,
+                        IsDeleted = false
+                    };
+                    existingCards.Add(newCard);
+                    Debug.WriteLine($"新規カードを追加: {editCardId}");
+                }
+                
+                // 更新されたcards.txtを作成
+                var updatedCardsContent = $"{existingCards.Count}\n{string.Join("\n", existingCards.Select(c => $"{c.Id},{c.LastModified}"))}";
+                
+                // 更新されたcards.txtをサーバーにアップロード
+                await _blobStorageService.SaveNoteAsync(uid, noteName, updatedCardsContent, subFolder);
+                Debug.WriteLine($"通常ノート: 更新されたcards.txtをBlob Storageにアップロード: {noteName}");
                 
                 // 編集されたカードのJSONファイルをアップロード
                 if (File.Exists(jsonPath))
@@ -2040,14 +2079,43 @@ namespace Flashnote
                 
                 Debug.WriteLine($"共有ノート情報 - 元UID: {sharedInfo.OriginalUserId}, パス: {sharedInfo.NotePath}");
                 
-                // cards.txtをアップロード
-                if (File.Exists(cardsFilePath))
+                // サーバーから既存のcards.txtを取得
+                var existingServerContent = await _blobStorageService.GetSharedNoteFileAsync(sharedInfo.OriginalUserId, sharedInfo.NotePath, "cards.txt");
+                var existingCards = new List<CardInfo>();
+                
+                if (!string.IsNullOrEmpty(existingServerContent))
                 {
-                    var cardsContent = await File.ReadAllTextAsync(cardsFilePath);
-                    var fullNotePath = $"{sharedInfo.NotePath}/{noteName}";
-                    await _blobStorageService.SaveSharedNoteFileAsync(sharedInfo.OriginalUserId, fullNotePath, "cards.txt", cardsContent);
-                    Debug.WriteLine($"共有ノート: cards.txtをBlob Storageにアップロード: {fullNotePath}");
+                    existingCards = await ParseCardsFile(existingServerContent);
+                    Debug.WriteLine($"サーバーから既存のカード数: {existingCards.Count}");
                 }
+                
+                // 編集されたカードの情報を更新
+                var existingCard = existingCards.FirstOrDefault(c => c.Id == editCardId);
+                if (existingCard != null)
+                {
+                    existingCard.LastModifiedDateTime = DateTime.Now;
+                    Debug.WriteLine($"既存カードの更新日時を更新: {editCardId}");
+                }
+                else
+                {
+                    // 新規カードの場合
+                    var newCard = new CardInfo
+                    {
+                        Id = editCardId,
+                        LastModifiedDateTime = DateTime.Now,
+                        IsDeleted = false
+                    };
+                    existingCards.Add(newCard);
+                    Debug.WriteLine($"新規カードを追加: {editCardId}");
+                }
+                
+                // 更新されたcards.txtを作成
+                var updatedCardsContent = $"{existingCards.Count}\n{string.Join("\n", existingCards.Select(c => $"{c.Id},{c.LastModified}"))}";
+                
+                // 更新されたcards.txtをサーバーにアップロード
+                var fullNotePath = $"{sharedInfo.NotePath}/{noteName}";
+                await _blobStorageService.SaveSharedNoteFileAsync(sharedInfo.OriginalUserId, fullNotePath, "cards.txt", updatedCardsContent);
+                Debug.WriteLine($"共有ノート: 更新されたcards.txtをBlob Storageにアップロード: {fullNotePath}");
                 
                 // 編集されたカードのJSONファイルをアップロード
                 if (File.Exists(jsonPath))
@@ -2060,6 +2128,65 @@ namespace Flashnote
             catch (Exception ex)
             {
                 Debug.WriteLine($"共有ノートへのカード保存エラー: {ex.Message}");
+                throw;
+            }
+        }
+
+        /// <summary>
+        /// cards.txtファイルをパースする
+        /// </summary>
+        private async Task<List<CardInfo>> ParseCardsFile(string content)
+        {
+            try
+            {
+                Debug.WriteLine($"ParseCardsFile開始 - コンテンツ長: {content.Length}");
+                var cards = new List<CardInfo>();
+                var lines = content.Split('\n', StringSplitOptions.RemoveEmptyEntries);
+                Debug.WriteLine($"行数: {lines.Length}");
+
+                // 1行目が数字のみの場合はカード数なのでスキップ
+                int startIndex = 0;
+                if (lines.Length > 0 && int.TryParse(lines[0], out _))
+                {
+                    startIndex = 1;
+                }
+
+                for (int i = startIndex; i < lines.Length; i++)
+                {
+                    try
+                    {
+                        // 行の末尾の改行文字を削除
+                        var line = lines[i].TrimEnd('\r', '\n');
+                        Debug.WriteLine($"行 {i} をパース: {line}");
+                        var parts = line.Split(',');
+                        if (parts.Length >= 2)
+                        {
+                            var card = new CardInfo
+                            {
+                                Id = parts[0],
+                                LastModified = parts[1].Trim(),
+                                IsDeleted = parts.Length >= 3 && parts[2].Trim() == "deleted"
+                            };
+                            cards.Add(card);
+                            Debug.WriteLine($"カード情報をパース: ID={card.Id}, 最終更新={card.LastModified}, 削除フラグ={card.IsDeleted}");
+                        }
+                        else
+                        {
+                            Debug.WriteLine($"行 {i} のパースに失敗: カンマ区切りの値が不足しています");
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        Debug.WriteLine($"カードのパースに失敗: {lines[i]}, エラー: {ex.Message}");
+                    }
+                }
+
+                Debug.WriteLine($"ParseCardsFile完了 - パースしたカード数: {cards.Count}");
+                return cards;
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"カードファイルのパース中にエラー: {ex.Message}");
                 throw;
             }
         }
