@@ -18,6 +18,14 @@ namespace Flashnote.Models
         public List<ChoiceData> choices { get; set; }
         public List<SelectionRect> selectionRects { get; set; }
         public string imageFileName { get; set; } // 画像穴埋めカード用の画像ファイル名
+        // PDF連携用
+        public PdfReference PdfReference { get; set; } // PDF情報
+    }
+
+    public class PdfReference
+    {
+        public string PdfId { get; set; }      // PDFファイル名やID
+        public int PageNumber { get; set; }    // ページ番号（1始まり）
     }
 
     public class ChoiceData

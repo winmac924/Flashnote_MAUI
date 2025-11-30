@@ -266,7 +266,7 @@ namespace Flashnote.Services
                             // トースト通知で自動同期完了を表示
                             var toast = Toast.Make("ネットワーク復帰により自動同期が完了しました", CommunityToolkit.Maui.Core.ToastDuration.Short);
                             toast?.Show();
-                            
+                        
                             // イベントを発火
                             AutoSyncCompleted?.Invoke(this, EventArgs.Empty);
                         }
@@ -573,21 +573,23 @@ namespace Flashnote.Services
             {
                 await EnsureInitializedAsync();
                 Debug.WriteLine($"ノートの取得開始 - UID: {uid}, ノート名: {noteName}, サブフォルダ: {subFolder ?? "なし"}");
-                
+
                 var containerClient = _blobServiceClient.GetBlobContainerClient(CONTAINER_NAME);
-                var userPath = GetUserPath(uid, subFolder);
                 string fullPath;
 
-                // cards.txtの場合
-                if (noteName.EndsWith(".json"))
+                // 新形式の構造に対応
+                if (Guid.TryParse(noteName, out _)) // UUID形式かどうかをチェック
                 {
-                    fullPath = $"{userPath}/{noteName}";
+                    fullPath = $"{uid}/{noteName}/cards.txt";
                 }
                 else
                 {
+                    // 旧形式の構造
+                    var userPath = GetUserPath(uid, subFolder);
                     fullPath = $"{userPath}/{noteName}/cards.txt";
                 }
 
+                Debug.WriteLine($"検索対象のパス: {fullPath}");
                 var blobClient = containerClient.GetBlobClient(fullPath);
                 cancellationTokenSource = NetworkOperationCancellationManager.CreateCancellationTokenSource(TimeSpan.FromSeconds(15));
 
@@ -605,7 +607,7 @@ namespace Flashnote.Services
             }
             catch (InvalidOperationException)
             {
-                // オフライン状態の場合は再スローして呼び出し元で適切に処理
+                // オンライン・オフライン自動切替時の競合を避けるため、再スロー
                 throw;
             }
             catch (OperationCanceledException)
@@ -687,7 +689,7 @@ namespace Flashnote.Services
             }
             catch (InvalidOperationException)
             {
-                // オフライン状態の場合は再スローして呼び出し元で適切に処理
+                // オンライン・オフライン自動切替時の競合を避けるため、再スロー
                 throw;
             }
             catch (OperationCanceledException)
@@ -885,50 +887,303 @@ namespace Flashnote.Services
                     return;
                 }
 
-                // ローカルの保存先パスを構築
-                var localPath = FolderPath;
-                if (subFolder != null)
+                // Only write files to temp extract path (LocalApplicationData) so UI reads from there.
+                var tempBasePath = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Flashnote");
+                var tempDir = string.IsNullOrEmpty(subFolder) ? Path.Combine(tempBasePath, noteName + "_temp") : Path.Combine(tempBasePath, subFolder, noteName + "_temp");
+                bool anyDownloaded = false; // track whether we downloaded anything new
+                try
                 {
-                    localPath = Path.Combine(localPath, subFolder);
-                }
-                localPath = Path.Combine(localPath, noteName);
-
-                // サブフォルダが存在しない場合は作成
-                if (!Directory.Exists(localPath))
-                {
-                    Directory.CreateDirectory(localPath);
-                    Debug.WriteLine($"サブフォルダを作成しました: {localPath}");
-                }
-
-                // ノートファイルのパス（サブフォルダを含めたパスで保存）
-                var notePath = Path.Combine(localPath, "cards.txt");
-                File.WriteAllText(notePath, content);
-                Debug.WriteLine($"ローカルノートを作成しました: {notePath}");
-
-                // cards.txtの場合、関連するJSONファイルも取得
-                var jsonFiles = await GetNoteListAsync(uid, $"{subFolder}/{noteName}/cards");
-                foreach (var jsonFile in jsonFiles)
-                {
-                    var jsonContent = await GetNoteContentAsync(uid, jsonFile, $"{subFolder}/{noteName}/cards");
-                    if (jsonContent != null)
+                    // Do not delete existing tempDir; perform incremental updates
+                    if (!Directory.Exists(tempDir))
                     {
-                        var cardsPath = Path.Combine(localPath, "cards");
-                        if (!Directory.Exists(cardsPath))
-                        {
-                            Directory.CreateDirectory(cardsPath);
-                        }
-                        var jsonPath = Path.Combine(cardsPath, jsonFile);
-                        File.WriteAllText(jsonPath, jsonContent);
-                        Debug.WriteLine($"JSONファイルを作成しました: {jsonPath}");
+                        Directory.CreateDirectory(tempDir);
+                        Debug.WriteLine($"tempDir を作成: {tempDir}");
                     }
+                    else
+                    {
+                        Debug.WriteLine($"tempDir は既に存在します: {tempDir}");
+                    }
+
+                    var tempNotePath = Path.Combine(tempDir, "cards.txt");
+
+                    // Only overwrite cards.txt if missing or different
+                    try
+                    {
+                        if (!File.Exists(tempNotePath))
+                        {
+                            File.WriteAllText(tempNotePath, content);
+                            anyDownloaded = true;
+                            Debug.WriteLine($"temp の cards.txt を作成しました: {tempNotePath}");
+                        }
+                        else
+                        {
+                            var existing = File.ReadAllText(tempNotePath);
+                            if (!string.Equals(existing, content, StringComparison.Ordinal))
+                            {
+                                File.WriteAllText(tempNotePath, content);
+                                anyDownloaded = true;
+                                Debug.WriteLine($"temp の cards.txt を上書きしました（差分あり）: {tempNotePath}");
+                            }
+                            else
+                            {
+                                Debug.WriteLine($"既存の cards.txt は最新のため上書きしません: {tempNotePath}");
+                            }
+                        }
+                    }
+                    catch (Exception exTemp)
+                    {
+                        Debug.WriteLine($"temp への cards.txt 書き込みに失敗: {exTemp.Message}");
+                    }
+                }
+                catch (Exception exDir)
+                {
+                    Debug.WriteLine($"tempDir 処理エラー: {exDir.Message}");
+                }
+
+                // cards.txt の内容に基づいて関連ファイルをダウンロード
+                try
+                {
+                    var lines = content.Split('\n')
+                                       .Select(line => line.Trim())
+                                       .Where(line => !string.IsNullOrEmpty(line))
+                                       .ToList();
+
+                    Debug.WriteLine($"cards.txt の行数: {lines.Count}");
+
+                    // 1 行目が数字のみの場合はカード数なのでスキップ
+                    int startIndex = 0;
+                    if (lines.Count > 0 && int.TryParse(lines[0], out _))
+                    {
+                        startIndex = 1;
+                        Debug.WriteLine($"1行目はカード数のためスキップ: {lines[0]}");
+                    }
+
+                    Debug.WriteLine($"カードファイルのダウンロード開始 - 処理対象行数: {lines.Count - startIndex}");
+
+                    var containerClient = _blobServiceClient.GetBlobContainerClient(CONTAINER_NAME);
+                    var tempCardsPath = Path.Combine(tempDir, "cards");
+                    if (!Directory.Exists(tempCardsPath)) Directory.CreateDirectory(tempCardsPath);
+
+                    // Build set of existing card ids to avoid re-downloading
+                    var existingCardIds = new HashSet<string>(Directory.GetFiles(tempCardsPath, "*.json").Select(f => Path.GetFileNameWithoutExtension(f)), StringComparer.OrdinalIgnoreCase);
+
+                    for (int i = startIndex; i < lines.Count; i++)
+                    {
+                        var line = lines[i];
+                        Debug.WriteLine($"処理中の行 {i}: {line}");
+                        var parts = line.Split(',');
+                        if (parts.Length >= 1)
+                        {
+                            var uuid = parts[0];
+                            Debug.WriteLine($"カードUUID: {uuid}");
+
+                            // If line indicates deletion, remove local card file if exists and continue
+                            bool isDeleted = parts.Any(p => p.Trim().Equals("deleted", StringComparison.OrdinalIgnoreCase));
+                            var localCardPath = Path.Combine(tempCardsPath, $"{uuid}.json");
+                            if (isDeleted)
+                            {
+                                try
+                                {
+                                    if (File.Exists(localCardPath))
+                                    {
+                                        File.Delete(localCardPath);
+                                        Debug.WriteLine($"削除フラグ検出: 共有ノートのローカルカードを削除しました: {localCardPath}");
+                                    }
+                                    else
+                                    {
+                                        Debug.WriteLine($"削除フラグ検出: ローカルにカードファイルは存在しません: {localCardPath}");
+                                    }
+                                }
+                                catch (Exception exDel)
+                                {
+                                    Debug.WriteLine($"共有ノートローカルカード削除エラー ({uuid}): {exDel.Message}");
+                                }
+                                continue;
+                            }
+
+                            // If we already have a non-empty file for this card, skip download
+                            if (File.Exists(localCardPath) && new FileInfo(localCardPath).Length > 5)
+                            {
+                                Debug.WriteLine($"既存のカードファイルがあるためダウンロードをスキップ: {localCardPath}");
+                                continue;
+                            }
+
+                            // Construct possible blob path for card JSON
+                            string blobName;
+                            if (Guid.TryParse(noteName, out _))
+                            {
+                                // flat UUID layout on blob: uid/{noteName}/cards/{uuid}.json
+                                blobName = $"{uid}/{noteName}/cards/{uuid}.json";
+                            }
+                            else
+                            {
+                                var userPath = GetUserPath(uid, subFolder);
+                                blobName = $"{userPath}/{noteName}/cards/{uuid}.json";
+                            }
+
+                            try
+                            {
+                                var blobClient = containerClient.GetBlobClient(blobName);
+                                if (await blobClient.ExistsAsync())
+                                {
+                                    var resp = await blobClient.DownloadAsync();
+                                    using var sr = new StreamReader(resp.Value.Content);
+                                    var jsonContent = await sr.ReadToEndAsync();
+                                    if (!string.IsNullOrEmpty(jsonContent))
+                                    {
+                                        File.WriteAllText(localCardPath, jsonContent);
+                                        anyDownloaded = true;
+                                        Debug.WriteLine($"temp JSONファイルを作成しました: {localCardPath}");
+                                    }
+                                    else
+                                    {
+                                        Debug.WriteLine($"ダウンロードしたJSONが空です: {blobName}");
+                                    }
+                                }
+                                else
+                                {
+                                    Debug.WriteLine($"カードJSONがBlob上に存在しません: {blobName}");
+                                }
+                            }
+                            catch (Exception exInner)
+                            {
+                                Debug.WriteLine($"カードJSON取得エラー ({uuid}): {exInner.Message}");
+                            }
+                        }
+                        else
+                        {
+                            Debug.WriteLine($"無効な行形式をスキップ: {line}");
+                        }
+                    }
+                }
+                catch (Exception ex)
+                {
+                    Debug.WriteLine($"カードファイルのダウンロード中にエラー: {ex.Message}");
+                }
+
+                // Download img folder (non-shared) - same level as cards
+                try
+                {
+                    var imgDir = Path.Combine(tempDir, "img");
+                    if (!Directory.Exists(imgDir)) Directory.CreateDirectory(imgDir);
+
+                    string imageFolderBlobPath;
+                    if (Guid.TryParse(noteName, out _))
+                    {
+                        // flat UUID layout: {noteName}/img
+                        imageFolderBlobPath = $"{noteName}/img";
+                    }
+                    else
+                    {
+                        // hierarchical: include subFolder if present
+                        imageFolderBlobPath = string.IsNullOrEmpty(subFolder) ? $"{noteName}/img" : $"{subFolder}/{noteName}/img";
+                    }
+
+                    Debug.WriteLine($"画像フォルダをダウンロード: blobFolder={imageFolderBlobPath}");
+                    var imageFiles = await GetImageFilesAsync(uid, imageFolderBlobPath);
+                    Debug.WriteLine($"取得した画像ファイル数: {imageFiles.Count}");
+
+                    foreach (var imgFile in imageFiles)
+                    {
+                        try
+                        {
+                            if (!System.Text.RegularExpressions.Regex.IsMatch(imgFile, @"^img_\d{8}_\d{6}\.jpg$"))
+                            {
+                                Debug.WriteLine($"画像ファイル形式ではないためスキップ: {imgFile}");
+                                continue;
+                            }
+
+                            var localImgPath = Path.Combine(imgDir, imgFile);
+                            if (File.Exists(localImgPath))
+                            {
+                                Debug.WriteLine($"既存の画像ファイルがあるためダウンロードをスキップ: {localImgPath}");
+                                continue;
+                            }
+
+                            var imgBytes = await GetImageBinaryAsync(uid, imgFile, imageFolderBlobPath);
+                            if (imgBytes != null && imgBytes.Length > 0)
+                            {
+                                await File.WriteAllBytesAsync(localImgPath, imgBytes);
+                                anyDownloaded = true;
+                                Debug.WriteLine($"画像ファイルをダウンロード: {localImgPath} ({imgBytes.Length} バイト)");
+                            }
+                            else
+                            {
+                                Debug.WriteLine($"画像ファイルの取得に失敗または空: {imgFile}");
+                            }
+                        }
+                        catch (Exception exImg)
+                        {
+                            Debug.WriteLine($"画像ファイルダウンロードエラー ({imgFile}): {exImg.Message}");
+                        }
+                    }
+                }
+                catch (Exception exImgAll)
+                {
+                    Debug.WriteLine($"imgフォルダダウンロード中にエラー: {exImgAll.Message}");
+                }
+
+                // Recreate .ankpls only if we downloaded new content or file doesn't exist
+                try
+                {
+                    // prepare target .ankpls path
+                    var localBasePath = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments), "Flashnote");
+                    string ankplsPath;
+                    if (!string.IsNullOrEmpty(subFolder))
+                    {
+                        var subFolderPath = Path.Combine(localBasePath, subFolder);
+                        if (!Directory.Exists(subFolderPath)) Directory.CreateDirectory(subFolderPath);
+                        ankplsPath = Path.Combine(subFolderPath, $"{noteName}.ankpls");
+                    }
+                    else
+                    {
+                        if (!Directory.Exists(localBasePath)) Directory.CreateDirectory(localBasePath);
+                        ankplsPath = Path.Combine(localBasePath, $"{noteName}.ankpls");
+                    }
+
+                    bool shouldCreateAnkpls = anyDownloaded || !File.Exists(ankplsPath);
+                    Debug.WriteLine($".ankpls作成判定: anyDownloaded={anyDownloaded}, exists={File.Exists(ankplsPath)} -> create={shouldCreateAnkpls}");
+
+                    if (shouldCreateAnkpls)
+                    {
+                        if (File.Exists(ankplsPath))
+                        {
+                            try { File.Delete(ankplsPath); Debug.WriteLine($"既存の.ankplsファイルを削除: {ankplsPath}"); } catch (Exception exDel) { Debug.WriteLine($".ankpls削除失敗: {exDel.Message}"); }
+                        }
+
+                        // 一時ディレクトリの内容を確認
+                        Debug.WriteLine($"一時ディレクトリの内容確認: {tempDir}");
+                        if (Directory.Exists(tempDir))
+                        {
+                            var tempFiles = Directory.GetFiles(tempDir, "*", SearchOption.AllDirectories);
+                            Debug.WriteLine($"一時ディレクトリのファイル数: {tempFiles.Length}");
+                            foreach (var file in tempFiles)
+                            {
+                                var relativePath = Path.GetRelativePath(tempDir, file);
+                                var fileSize = new FileInfo(file).Length;
+                                Debug.WriteLine($"  ファイル: {relativePath} ({fileSize} バイト)");
+                            }
+                        }
+
+                        System.IO.Compression.ZipFile.CreateFromDirectory(tempDir, ankplsPath);
+                        Debug.WriteLine($".ankplsファイルを作成: {ankplsPath}");
+                    }
+                    else
+                    {
+                        Debug.WriteLine($".ankplsファイルは最新のため作成をスキップ: {ankplsPath}");
+                    }
+                }
+                catch (Exception exZip)
+                {
+                    Debug.WriteLine($".ankpls作成中にエラー: {exZip.Message}");
                 }
             }
             catch (Exception ex)
             {
-                Debug.WriteLine($"ローカルノートの作成中にエラー: {ex.Message}");
-                throw;
-            }
-        }
+                 Debug.WriteLine($"ローカルノートの作成中にエラー: {ex.Message}");
+                 throw;
+             }
+         }
 
         /// <summary>
         /// 共有キーからノート情報にアクセスする
@@ -1083,7 +1338,7 @@ namespace Flashnote.Services
                 if (cardsContent != null)
                 {
                     var cardsPath = Path.Combine(tempDir, "cards.txt");
-                    
+
                     // 既存のcards.txtがある場合は上書きしない
                     if (File.Exists(cardsPath))
                     {
@@ -1101,7 +1356,7 @@ namespace Flashnote.Services
                     var lines = cardsContent.Split('\n', StringSplitOptions.RemoveEmptyEntries);
                     Debug.WriteLine($"cards.txtの行数: {lines.Length}");
                     var cardsDirPath = Path.Combine(tempDir, "cards");
-                    
+
                     if (!Directory.Exists(cardsDirPath))
                     {
                         Directory.CreateDirectory(cardsDirPath);
@@ -1127,21 +1382,47 @@ namespace Flashnote.Services
                             var uuid = parts[0];
                             Debug.WriteLine($"カードUUID: {uuid}");
                             var cardContent = await GetSharedNoteFileAsync(userId, $"{notePath}/cards", $"{uuid}.json");
-                            Debug.WriteLine($"カードファイル取得結果 {uuid}: {(cardContent != null ? "成功" : "失敗")}");
+                            
+                            // If line indicates deletion, remove local card file if exists and continue
+                            bool isDeleted = parts.Any(p => p.Trim().Equals("deleted", StringComparison.OrdinalIgnoreCase));
+                            var localCardPath = Path.Combine(cardsDirPath, $"{uuid}.json");
+                            if (isDeleted)
+                            {
+                                try
+                                {
+                                    if (File.Exists(localCardPath))
+                                    {
+                                        File.Delete(localCardPath);
+                                        Debug.WriteLine($"削除フラグ検出: 共有ノートのローカルカードを削除しました: {localCardPath}");
+                                    }
+                                    else
+                                    {
+                                        Debug.WriteLine($"削除フラグ検出: ローカルにカードファイルは存在しません: {localCardPath}");
+                                    }
+                                }
+                                catch (Exception exDel)
+                                {
+                                    Debug.WriteLine($"共有ノートローカルカード削除エラー ({uuid}): {exDel.Message}");
+                                }
+                                continue;
+                            }
+
                             if (cardContent != null)
                             {
-                                var cardPath = Path.Combine(cardsDirPath, $"{uuid}.json");
-                                
                                 // 既存のカードファイルがある場合は上書きしない
-                                if (File.Exists(cardPath))
+                                if (File.Exists(localCardPath))
                                 {
-                                    Debug.WriteLine($"既存のカードファイルが存在するため、ダウンロードをスキップ: {uuid}");
+                                    Debug.WriteLine($"既存のカードファイルが存在するためダウンロードをスキップ: {uuid}");
                                 }
                                 else
                                 {
-                                    await File.WriteAllTextAsync(cardPath, cardContent);
-                                    Debug.WriteLine($"カードファイルをダウンロード: {cardPath}");
+                                    await File.WriteAllTextAsync(localCardPath, cardContent);
+                                    Debug.WriteLine($"カードファイルをダウンロード: {localCardPath}");
                                 }
+                            }
+                            else
+                            {
+                                Debug.WriteLine($"カードファイルの取得に失敗: {uuid}");
                             }
                         }
                         else
@@ -1457,7 +1738,7 @@ namespace Flashnote.Services
             catch (Exception ex)
             {
                 Debug.WriteLine($"共有キーのダウンロード中にエラー: {ex.Message}");
-                throw;
+                return null;
             }
         }
 
@@ -1685,8 +1966,18 @@ namespace Flashnote.Services
                 Debug.WriteLine($"カード追加開始 - UID: {uid}, ノート名: {noteName}, カードID: {cardId}, サブフォルダ: {subFolder ?? "なし"}");
                 
                 var containerClient = _blobServiceClient.GetBlobContainerClient(CONTAINER_NAME);
-                var userPath = GetUserPath(uid, subFolder);
-                var fullPath = $"{userPath}/{noteName}/cards.txt";
+                // Build fullPath for cards.txt depending on layout (flat UUID vs hierarchical)
+                string fullPath;
+                if (Guid.TryParse(noteName, out _))
+                {
+                    // flat layout: uid/{noteName}/cards.txt
+                    fullPath = $"{uid}/{noteName}/cards.txt";
+                }
+                else
+                {
+                    var userPath = GetUserPath(uid, subFolder);
+                    fullPath = $"{userPath}/{noteName}/cards.txt";
+                }
 
                 var blobClient = containerClient.GetBlobClient(fullPath);
                 cancellationTokenSource = NetworkOperationCancellationManager.CreateCancellationTokenSource(TimeSpan.FromSeconds(30));
@@ -1715,8 +2006,19 @@ namespace Flashnote.Services
                 await blobClient.UploadAsync(stream, overwrite: true, cancellationToken: cancellationTokenSource.Token);
                 Debug.WriteLine($"cards.txtを更新: {fullPath}, カード数: {cardCount}");
                 
+
                 // カードのJSONファイルを個別に保存
-                var cardJsonPath = $"{userPath}/{noteName}/cards/{cardId}.json";
+                string cardJsonPath;
+                if (Guid.TryParse(noteName, out _))
+                {
+                    // flat layout: uid/{noteName}/cards/{cardId}.json
+                    cardJsonPath = $"{uid}/{noteName}/cards/{cardId}.json";
+                }
+                else
+                {
+                    var userPath = GetUserPath(uid, subFolder);
+                    cardJsonPath = $"{userPath}/{noteName}/cards/{cardId}.json";
+                }
                 var cardBlobClient = containerClient.GetBlobClient(cardJsonPath);
                 using var cardStream = new MemoryStream(System.Text.Encoding.UTF8.GetBytes(cardContent));
                 await cardBlobClient.UploadAsync(cardStream, overwrite: true, cancellationToken: cancellationTokenSource.Token);
@@ -1737,7 +2039,7 @@ namespace Flashnote.Services
             }
             catch (InvalidOperationException)
             {
-                // オフライン状態の場合は再スローして呼び出し元で適切に処理
+                // オンライン・オフライン自動切替時の競合を避けるため、再スロー
                 throw;
             }
             catch (OperationCanceledException)
@@ -1779,7 +2081,18 @@ namespace Flashnote.Services
                 Debug.WriteLine($"共有ノートカード追加開始 - 元UID: {originalUserId}, ノートパス: {notePath}, カードID: {cardId}");
                 
                 var containerClient = _blobServiceClient.GetBlobContainerClient(CONTAINER_NAME);
-                var fullPath = $"{originalUserId}/{notePath}/cards.txt";
+                // Build full path for cards.txt and card JSON depending on layout
+                string fullPath;
+                if (Guid.TryParse(notePath, out _))
+                {
+                    // flat layout: {originalUserId}/{notePath}/cards.txt
+                    fullPath = $"{originalUserId}/{notePath}/cards.txt";
+                }
+                else
+                {
+                    // hierarchical: notePath may contain subfolders (e.g. "sub/folder/note")
+                    fullPath = $"{originalUserId}/{notePath}/cards.txt";
+                }
 
                 var blobClient = containerClient.GetBlobClient(fullPath);
                 cancellationTokenSource = NetworkOperationCancellationManager.CreateCancellationTokenSource(TimeSpan.FromSeconds(30));
@@ -1807,9 +2120,17 @@ namespace Flashnote.Services
                 using var stream = new MemoryStream(System.Text.Encoding.UTF8.GetBytes(updatedContent));
                 await blobClient.UploadAsync(stream, overwrite: true, cancellationToken: cancellationTokenSource.Token);
                 Debug.WriteLine($"共有ノートcards.txtを更新: {fullPath}, カード数: {cardCount}");
-                
+
                 // カードのJSONファイルを個別に保存
-                var cardJsonPath = $"{originalUserId}/{notePath}/cards/{cardId}.json";
+                string cardJsonPath;
+                if (Guid.TryParse(notePath, out _))
+                {
+                    cardJsonPath = $"{originalUserId}/{notePath}/cards/{cardId}.json";
+                }
+                else
+                {
+                    cardJsonPath = $"{originalUserId}/{notePath}/cards/{cardId}.json";
+                }
                 var cardBlobClient = containerClient.GetBlobClient(cardJsonPath);
                 using var cardStream = new MemoryStream(System.Text.Encoding.UTF8.GetBytes(cardContent));
                 await cardBlobClient.UploadAsync(cardStream, overwrite: true, cancellationToken: cancellationTokenSource.Token);
@@ -1818,7 +2139,7 @@ namespace Flashnote.Services
             }
             catch (InvalidOperationException)
             {
-                // オフライン状態の場合は再スローして呼び出し元で適切に処理
+                // オンライン・オフライン自動切替時の競合を避けるため、再スロー
                 throw;
             }
             catch (OperationCanceledException)
@@ -1847,5 +2168,127 @@ namespace Flashnote.Services
                 }
             }
         }
+
+        /// <summary>
+        /// 指定されたユーザー領域にある任意のファイルを取得する（例: metadata.json）
+        /// </summary>
+        public async Task<string> GetUserFileAsync(string uid, string fileName, string subFolder = null)
+        {
+            CancellationTokenSource cancellationTokenSource = null;
+            try
+            {
+                await EnsureInitializedAsync();
+                Debug.WriteLine($"ユーザーファイル取得開始 - UID: {uid}, ファイル名: {fileName}, サブフォルダ: {subFolder ?? "なし"}");
+
+                var containerClient = _blobServiceClient.GetBlobContainerClient(CONTAINER_NAME);
+                string fullPath;
+                if (!string.IsNullOrEmpty(subFolder))
+                {
+                    fullPath = $"{uid}/{subFolder}/{fileName}";
+                }
+                else
+                {
+                    fullPath = $"{uid}/{fileName}";
+                }
+
+                Debug.WriteLine($"検索対象のパス: {fullPath}");
+                var blobClient = containerClient.GetBlobClient(fullPath);
+                cancellationTokenSource = NetworkOperationCancellationManager.CreateCancellationTokenSource(TimeSpan.FromSeconds(15));
+
+                if (await blobClient.ExistsAsync(cancellationTokenSource.Token))
+                {
+                    var response = await blobClient.DownloadAsync(cancellationTokenSource.Token);
+                    using var streamReader = new StreamReader(response.Value.Content);
+                    var content = await streamReader.ReadToEndAsync();
+                    Debug.WriteLine($"ユーザーファイル取得完了 - サイズ: {content.Length} バイト, パス: {fullPath}");
+                    return content;
+                }
+
+                Debug.WriteLine($"ユーザーファイルが見つかりません: {fullPath}");
+                return null;
+            }
+            catch (InvalidOperationException)
+            {
+                throw;
+            }
+            catch (OperationCanceledException)
+            {
+                throw new TimeoutException("ユーザーファイル取得がタイムアウトしました。ネットワーク接続を確認してください。");
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"ユーザーファイル取得中にエラー: {ex.Message}");
+                return null;
+            }
+            finally
+            {
+                if (cancellationTokenSource != null)
+                {
+                    try
+                    {
+                        NetworkOperationCancellationManager.RemoveCancellationTokenSource(cancellationTokenSource);
+                        cancellationTokenSource.Dispose();
+                    }
+                    catch (Exception disposeEx)
+                    {
+                        Debug.WriteLine($"CancellationTokenSourceクリーンアップエラー: {disposeEx.Message}");
+                    }
+                }
+            }
+        }
+
+        /// <summary>
+        /// ユーザー配下のすべての metadata.json を取得する
+        /// </summary>
+        public async Task<List<(string blobName, string content)>> GetAllMetadataJsonAsync(string uid)
+        {
+            await EnsureInitializedAsync();
+            var results = new List<(string blobName, string content)>();
+            CancellationTokenSource cts = null;
+            try
+            {
+                var containerClient = _blobServiceClient.GetBlobContainerClient(CONTAINER_NAME);
+                var prefix = $"{uid}/";
+                await foreach (var blobItem in containerClient.GetBlobsAsync(prefix: prefix))
+                {
+                    if (!blobItem.Name.EndsWith("/metadata.json", StringComparison.OrdinalIgnoreCase))
+                        continue;
+
+                    try
+                    {
+                        var blobClient = containerClient.GetBlobClient(blobItem.Name);
+                        cts = NetworkOperationCancellationManager.CreateCancellationTokenSource(TimeSpan.FromSeconds(20));
+                        var resp = await blobClient.DownloadAsync(cts.Token);
+                        using var sr = new StreamReader(resp.Value.Content);
+                        var json = await sr.ReadToEndAsync();
+                        results.Add((blobItem.Name, json));
+                    }
+                    catch (Exception ex)
+                    {
+                        Debug.WriteLine($"metadata.json ダウンロード失敗: {blobItem.Name} - {ex.Message}");
+                    }
+                    finally
+                    {
+                        if (cts != null)
+                        {
+                            try { NetworkOperationCancellationManager.RemoveCancellationTokenSource(cts); cts.Dispose(); } catch { }
+                            cts = null;
+                        }
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"GetAllMetadataJsonAsync エラー: {ex.Message}");
+            }
+            finally
+            {
+                if (cts != null)
+                {
+                    try { NetworkOperationCancellationManager.RemoveCancellationTokenSource(cts); cts.Dispose(); } catch { }
+                }
+            }
+            return results;
+        }
     }
-} 
+}

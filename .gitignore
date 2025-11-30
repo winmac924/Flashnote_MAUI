@@ -456,3 +456,4 @@ appsettings.json
 
 # 🚀 リリース用フォルダ
 Release_*/
+/SyncManager.swift
