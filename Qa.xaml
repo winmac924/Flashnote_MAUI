@@ -4,34 +4,38 @@
              xmlns:skia="clr-namespace:SkiaSharp.Views.Maui.Controls;assembly=SkiaSharp.Views.Maui.Controls"
              xmlns:local="clr-namespace:Flashnote">
 
-    <ContentPage.Resources>
-        <ResourceDictionary>
-            <!-- ダークモード対応の色定義 -->
-            <Color x:Key="BackgroundLight">#FFFFFF</Color>
-            <Color x:Key="BackgroundDark">#1E1E1E</Color>
-            <Color x:Key="TextLight">#000000</Color>
-            <Color x:Key="TextDark">#FFFFFF</Color>
-            <Color x:Key="BorderLight">#CCCCCC</Color>
-            <Color x:Key="BorderDark">#555555</Color>
-            <Color x:Key="CanvasBackgroundLight">#FFFFFF</Color>
-            <Color x:Key="CanvasBackgroundDark">#2D2D30</Color>
-        </ResourceDictionary>
-    </ContentPage.Resources>
-
-    <Grid>
-        <Grid.BackgroundColor>
-            <AppThemeBinding Light="{StaticResource BackgroundLight}" 
-                            Dark="{StaticResource BackgroundDark}" />
-        </Grid.BackgroundColor>
+    <Grid Background="{StaticResource BackgroundBrush}">
         <Grid.RowDefinitions>
             <RowDefinition Height="*"/>
             <!-- 上部コンテンツを可変サイズに -->
             <RowDefinition Height="Auto"/>
             <!-- ボタンの高さ分 -->
         </Grid.RowDefinitions>
+
+        <!-- 列を追加：左=資料表示（PDF）、右=ノート/問題 -->
+        <Grid.ColumnDefinitions>
+            <ColumnDefinition Width="*" />
+            <ColumnDefinition Width="*" />
+        </Grid.ColumnDefinitions>
         
-        <!-- 問題表示エリア（スクロール対応） -->
-        <ScrollView Grid.Row="0" Margin="0,0,0,10">
+        <!-- 資料表示エリア（左カラム） -->
+        <Grid Grid.Row="0" Grid.Column="0" Padding="0" x:Name="MaterialContainer" IsVisible="False">
+            <VerticalStackLayout Spacing="0" Padding="0">
+                <Grid Padding="8" BackgroundColor="Transparent">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+                    <Label x:Name="MaterialFileNameLabel" Text="" VerticalOptions="Center" FontAttributes="Bold"
+                           TextColor="{AppThemeBinding Light={StaticResource TextLight}, Dark={StaticResource TextDark}}" />
+                    <Button Text="閉じる"  Grid.Column="1" />
+                </Grid>
+                <WebView x:Name="MaterialWebView" VerticalOptions="FillAndExpand" HorizontalOptions="FillAndExpand" />
+            </VerticalStackLayout>
+        </Grid>
+
+        <!-- 問題表示エリア（スクロール対応） 右カラムに移動 -->
+        <ScrollView x:Name="QuestionScrollView" Grid.Row="0" Grid.Column="0" Grid.ColumnSpan="2" Margin="0,0,0,10">
             <VerticalStackLayout Spacing="10" Padding="10">
                 <!-- 問題数表示 -->
                 <Label x:Name="QuestionNumberLabel"
@@ -39,12 +43,8 @@
                        FontSize="16"
                        FontAttributes="Bold"
                        HorizontalOptions="Center"
-                       Margin="0,0,0,10">
-                    <Label.TextColor>
-                        <AppThemeBinding Light="{StaticResource TextLight}" 
-                                        Dark="{StaticResource TextDark}" />
-                    </Label.TextColor>
-                </Label>
+                       Margin="0,0,0,10"
+                       TextColor="{AppThemeBinding Light={StaticResource TextLight}, Dark={StaticResource TextDark}}" />
                 
                 <!-- 問題表示エリア -->
                 <Grid x:Name="QuestionContainer">
@@ -53,15 +53,9 @@
                     <VerticalStackLayout x:Name="BasicCardLayout"
                                          IsVisible="False"
                                          Spacing="10">
-                        <Frame Padding="10" HasShadow="False" CornerRadius="8">
-                            <Frame.BackgroundColor>
-                                <AppThemeBinding Light="{StaticResource BackgroundLight}" 
-                                                Dark="{StaticResource BackgroundDark}" />
-                            </Frame.BackgroundColor>
-                            <Frame.BorderColor>
-                                <AppThemeBinding Light="{StaticResource BorderLight}" 
-                                                Dark="{StaticResource BorderDark}" />
-                            </Frame.BorderColor>
+                        <Frame Padding="10" HasShadow="False" CornerRadius="8"
+                               Background="{StaticResource BackgroundBrush}"
+                               BorderColor="{AppThemeBinding Light={StaticResource BorderLight}, Dark={StaticResource BorderDark}}">
                             <local:RichTextLabel x:Name="FrontPreviewLabel"
                                                 FontSize="16"
                                                 LineBreakMode="WordWrap"/>
@@ -74,12 +68,8 @@
                                             Padding="10">
                             <Label Text="回答を入力してください:" 
                                    FontSize="14"
-                                   FontAttributes="Bold">
-                                <Label.TextColor>
-                                    <AppThemeBinding Light="{StaticResource TextLight}" 
-                                                    Dark="{StaticResource TextDark}" />
-                                </Label.TextColor>
-                            </Label>
+                                   FontAttributes="Bold"
+                                   TextColor="{AppThemeBinding Light={StaticResource TextLight}, Dark={StaticResource TextDark}}" />
                             <ScrollView>
                                 <VerticalStackLayout x:Name="TextInputFieldsContainer" 
                                                     Spacing="8"/>
@@ -93,12 +83,8 @@
                                               Margin="0,10,0,0">
                             <Label Text="テキスト入力モード:" 
                                    VerticalOptions="Center"
-                                   FontSize="14">
-                                <Label.TextColor>
-                                    <AppThemeBinding Light="{StaticResource TextLight}" 
-                                                    Dark="{StaticResource TextDark}" />
-                                </Label.TextColor>
-                            </Label>
+                                   FontSize="14"
+                                   TextColor="{AppThemeBinding Light={StaticResource TextLight}, Dark={StaticResource TextDark}}" />
                             <Switch x:Name="TextInputModeToggle" 
                                     IsToggled="False"
                                     Toggled="OnTextInputModeToggled"/>
@@ -106,15 +92,9 @@
                         
                         <Frame Padding="10" HasShadow="False" CornerRadius="8"
                                x:Name="BackPreviewFrame"
-                               IsVisible="False">
-                            <Frame.BackgroundColor>
-                                <AppThemeBinding Light="{StaticResource BackgroundLight}" 
-                                                Dark="{StaticResource BackgroundDark}" />
-                            </Frame.BackgroundColor>
-                            <Frame.BorderColor>
-                                <AppThemeBinding Light="{StaticResource BorderLight}" 
-                                                Dark="{StaticResource BorderDark}" />
-                            </Frame.BorderColor>
+                               IsVisible="False"
+                               Background="{StaticResource BackgroundBrush}"
+                               BorderColor="{AppThemeBinding Light={StaticResource BorderLight}, Dark={StaticResource BorderDark}}">
                             <local:RichTextLabel x:Name="BackPreviewLabel"
                                                 FontSize="16"
                                                 LineBreakMode="WordWrap"/>
@@ -125,15 +105,9 @@
                     <VerticalStackLayout x:Name="ChoiceCardLayout"
                                          IsVisible="False"
                                          Spacing="10">
-                        <Frame Padding="10" HasShadow="False" CornerRadius="8">
-                            <Frame.BackgroundColor>
-                                <AppThemeBinding Light="{StaticResource BackgroundLight}" 
-                                                Dark="{StaticResource BackgroundDark}" />
-                            </Frame.BackgroundColor>
-                            <Frame.BorderColor>
-                                <AppThemeBinding Light="{StaticResource BorderLight}" 
-                                                Dark="{StaticResource BorderDark}" />
-                            </Frame.BorderColor>
+                        <Frame Padding="10" HasShadow="False" CornerRadius="8"
+                               Background="{StaticResource BackgroundBrush}"
+                               BorderColor="{AppThemeBinding Light={StaticResource BorderLight}, Dark={StaticResource BorderDark}}">
                             <local:RichTextLabel x:Name="ChoiceQuestionLabel"
                                                 FontSize="16"
                                                 LineBreakMode="WordWrap"/>
@@ -141,15 +115,9 @@
                         <VerticalStackLayout x:Name="ChoiceContainer" Spacing="5" Padding="10"/>
                         <Frame Padding="10" HasShadow="False" CornerRadius="8"
                                x:Name="ChoiceExplanationFrame"
-                               IsVisible="False">
-                            <Frame.BackgroundColor>
-                                <AppThemeBinding Light="{StaticResource BackgroundLight}" 
-                                                Dark="{StaticResource BackgroundDark}" />
-                            </Frame.BackgroundColor>
-                            <Frame.BorderColor>
-                                <AppThemeBinding Light="{StaticResource BorderLight}" 
-                                                Dark="{StaticResource BorderDark}" />
-                            </Frame.BorderColor>
+                               IsVisible="False"
+                               Background="{StaticResource BackgroundBrush}"
+                               BorderColor="{AppThemeBinding Light={StaticResource BorderLight}, Dark={StaticResource BorderDark}}">
                             <local:RichTextLabel x:Name="ChoiceExplanationLabel"
                                                 FontSize="16"
                                                 LineBreakMode="WordWrap"/>
@@ -160,15 +128,9 @@
                     <VerticalStackLayout x:Name="ImageFillCardLayout"
                                          IsVisible="False"
                                          Spacing="10">
-                        <Frame Padding="5" HasShadow="False" CornerRadius="8">
-                            <Frame.BackgroundColor>
-                                <AppThemeBinding Light="{StaticResource CanvasBackgroundLight}" 
-                                                Dark="{StaticResource CanvasBackgroundDark}" />
-                            </Frame.BackgroundColor>
-                            <Frame.BorderColor>
-                                <AppThemeBinding Light="{StaticResource BorderLight}" 
-                                                Dark="{StaticResource BorderDark}" />
-                            </Frame.BorderColor>
+                        <Frame Padding="5" HasShadow="False" CornerRadius="8"
+                               Background="{StaticResource CanvasBackgroundBrush}"
+                               BorderColor="{AppThemeBinding Light={StaticResource BorderLight}, Dark={StaticResource BorderDark}}">
                             <skia:SKCanvasView x:Name="CanvasView"
                                                HeightRequest="300"
                                                WidthRequest="500"
@@ -182,24 +144,25 @@
         </ScrollView>
         
         <!-- 正解・不正解ボタン（固定位置） -->
-        <Frame Grid.Row="1" 
+        <Frame Grid.Row="1" Grid.ColumnSpan="2" 
                Padding="10,15"
                HasShadow="True"
-               CornerRadius="0">
-            <Frame.BackgroundColor>
-                <AppThemeBinding Light="{StaticResource BackgroundLight}" 
-                                Dark="{StaticResource BackgroundDark}" />
-            </Frame.BackgroundColor>
-            <Frame.BorderColor>
-                <AppThemeBinding Light="{StaticResource BorderLight}" 
-                                Dark="{StaticResource BorderDark}" />
-            </Frame.BorderColor>
+               CornerRadius="0"
+               Background="{StaticResource BackgroundBrush}"
+               BorderColor="{AppThemeBinding Light={StaticResource BorderLight}, Dark={StaticResource BorderDark}}">
             <HorizontalStackLayout HorizontalOptions="Center"
                                    VerticalOptions="Center"
                                    Spacing="15">
                 <Button x:Name="ShowAnswerButton"
                         Text="解答を表示"
                         Clicked="OnShowAnswerClicked"
+                        HorizontalOptions="Center"
+                        VerticalOptions="Center"
+                        WidthRequest="120"/>
+
+                <Button x:Name="ViewMaterialButton"
+                        Text="資料を見る"
+                        
                         HorizontalOptions="Center"
                         VerticalOptions="Center"
                         WidthRequest="120"/>
@@ -214,12 +177,8 @@
                 <Grid IsVisible="False" x:Name="SeparatorGrid">
                     <BoxView HeightRequest="2"
                              WidthRequest="30"
-                             VerticalOptions="Center">
-                        <BoxView.BackgroundColor>
-                            <AppThemeBinding Light="{StaticResource BorderLight}" 
-                                            Dark="{StaticResource BorderDark}" />
-                        </BoxView.BackgroundColor>
-                    </BoxView>
+                             VerticalOptions="Center"
+                             BackgroundColor="{AppThemeBinding Light={StaticResource BorderLight}, Dark={StaticResource BorderDark}}" />
                 </Grid>                
                 <Button x:Name="Incorrect"
                         Text="不正解"

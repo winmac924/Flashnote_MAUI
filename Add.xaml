@@ -7,15 +7,18 @@
     <Grid>
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
             <RowDefinition Height="*"/>
         </Grid.RowDefinitions>
 
-        <!-- ヘッダー部分 -->
+        <!-- ヘッダー部分（固定） -->
         <Grid Grid.Row="0" 
               BackgroundColor="{AppThemeBinding Light=#F0F0F0, Dark=#2D2D30}"
               Padding="15,10">
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="*"/>
+                <ColumnDefinition Width="Auto"/>
+                <ColumnDefinition Width="Auto"/>
                 <ColumnDefinition Width="Auto"/>
                 <ColumnDefinition Width="Auto"/>
             </Grid.ColumnDefinitions>
@@ -40,15 +43,115 @@
                     CornerRadius="21"
                     Clicked="OnHelpClicked"/>
                     
+            <!-- 資料選択ボタン -->
+            <Button Grid.Column="2"
+                    x:Name="SelectMaterialButton"
+                    Text="資料を選択"
+                    BackgroundColor="Transparent"
+                    TextColor="{AppThemeBinding Light=#007ACC, Dark=#66A3FF}"
+                    VerticalOptions="Center"
+                    Clicked="OnSelectMaterialClicked" />
+                    
             <!-- ステータスインジケーター -->
-            <views:StatusIndicator Grid.Column="2" 
+            <views:StatusIndicator Grid.Column="4" 
                                    x:Name="StatusIndicator" 
                                    VerticalOptions="Center" 
                                    Margin="10,0,0,0" />
         </Grid>
 
-        <!-- メインコンテンツ -->
-        <ScrollView Grid.Row="1">
+        <!-- 埋め込みPDFビューワー（固定・初期は非表示・最大高さ制限） -->
+        <Border Grid.Row="1" 
+                x:Name="PdfViewerContainer" 
+                IsVisible="False" 
+                BackgroundColor="{AppThemeBinding Light=#FFFFFF, Dark=#1F1F1F}"
+                Stroke="Transparent"
+                StrokeThickness="0"
+                Padding="0"
+                HeightRequest="300"
+                MaximumHeightRequest="350">
+            <Grid>
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="*" />
+                    <RowDefinition Height="Auto" />
+                </Grid.RowDefinitions>
+
+                <!-- PDFファイル名と閉じるボタン -->
+                <Grid Grid.Row="0" ColumnDefinitions="*,Auto">
+                    <Label x:Name="PdfFileNameLabel"
+                           VerticalOptions="Center" 
+                           Text="" 
+                           FontSize="14"
+                           FontAttributes="Bold"
+                           LineBreakMode="TailTruncation"
+                           TextColor="{AppThemeBinding Light=#1F1F1F, Dark=#FFFFFF}" />
+                    <Button Grid.Column="1"
+                            Text="閉じる" 
+                            FontSize="12"
+                            Padding="10,5"
+                            BackgroundColor="{AppThemeBinding Light=#F0F0F0, Dark=#2D2D30}"
+                            TextColor="{AppThemeBinding Light=#1F1F1F, Dark=#FFFFFF}"
+                            Clicked="OnClosePdfEmbedClicked" />
+                </Grid>
+
+                <!-- WebView と Image のどちらかを使って表示 -->
+                <Border Grid.Row="1" 
+                        Stroke="Transparent"
+                        StrokeThickness="0"
+                        Margin="0"
+                        Padding="0"
+                        BackgroundColor="{AppThemeBinding Light=#FFFFFF, Dark=#1F1F1F}">
+                    <Grid>
+                        <WebView x:Name="PdfEmbedWebView" IsVisible="True" />
+                        <Image x:Name="PdfPageImage" IsVisible="False" Aspect="AspectFit" />
+                    </Grid>
+                </Border>
+
+                <!-- ページナビゲーション -->
+                <HorizontalStackLayout Grid.Row="2" 
+                                       Spacing="8" 
+                                       HorizontalOptions="Center"
+                                       Margin="8,8,8,8">
+                    <Button Text="◀ 前"
+                            FontSize="12"
+                            Padding="12,6"
+                            BackgroundColor="{AppThemeBinding Light=#007ACC, Dark=#0E639C}"
+                            TextColor="White"
+                            Clicked="OnPrevPageClicked" />
+                    <Button Text="次 ▶"
+                            FontSize="12"
+                            Padding="12,6"
+                            BackgroundColor="{AppThemeBinding Light=#007ACC, Dark=#0E639C}"
+                            TextColor="White"
+                            Clicked="OnNextPageClicked" />
+                    <Label Text="ページ:" 
+                           VerticalOptions="Center"
+                           Margin="8,0,0,0"
+                           TextColor="{AppThemeBinding Light=#1F1F1F, Dark=#FFFFFF}" />
+                    <Entry x:Name="PageNumberEntry" 
+                           WidthRequest="60" 
+                           FontSize="12"
+                           HorizontalTextAlignment="Center"
+                           Keyboard="Numeric" />
+                    <Button Text="移動"
+                            FontSize="12"
+                            Padding="12,6"
+                            BackgroundColor="{AppThemeBinding Light=#5C2D91, Dark=#8E44AD}"
+                            TextColor="White"
+                            Clicked="OnSetPageClicked" />
+                    <!-- デフォルトに設定ボタン -->
+                    <Button x:Name="SetDefaultMaterialButton"
+                            Text="デフォルトに設定"
+                            BackgroundColor="{AppThemeBinding Light=#007ACC, Dark=#66A3FF}"
+                            TextColor="White"
+                            VerticalOptions="Center"
+                            Clicked="OnSetDefaultMaterialClicked" />
+                </HorizontalStackLayout>
+            </Grid>
+        </Border>
+
+        <!-- メインコンテンツ（スクロール可能） -->
+        <ScrollView Grid.Row="2">
             <VerticalStackLayout x:Name="CardContainer" 
                                  Padding="10"
                                  Spacing="10">
@@ -57,6 +160,6 @@
         </ScrollView>
 
         <!-- ヘルプオーバーレイ -->
-        <views:HelpOverlay x:Name="HelpOverlayControl" Grid.RowSpan="2"/>
+        <views:HelpOverlay x:Name="HelpOverlayControl" Grid.RowSpan="3"/>
     </Grid>
 </ContentPage>

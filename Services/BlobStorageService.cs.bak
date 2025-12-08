@@ -266,7 +266,7 @@ namespace Flashnote.Services
                             // トースト通知で自動同期完了を表示
                             var toast = Toast.Make("ネットワーク復帰により自動同期が完了しました", CommunityToolkit.Maui.Core.ToastDuration.Short);
                             toast?.Show();
-                            
+                        
                             // イベントを発火
                             AutoSyncCompleted?.Invoke(this, EventArgs.Empty);
                         }

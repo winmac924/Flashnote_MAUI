@@ -29,6 +29,22 @@
     <Color x:Key="Gray900">#212121</Color>
     <Color x:Key="Gray950">#141414</Color>
 
+    <!-- Base light/dark tokens used by AppThemeBinding -->
+    <Color x:Key="BackgroundLight">#FFFFFF</Color>
+    <Color x:Key="BackgroundDark">#1E1E1E</Color>
+    <Color x:Key="TextLight">#000000</Color>
+    <Color x:Key="TextDark">#FFFFFF</Color>
+    <Color x:Key="BorderLight">#CCCCCC</Color>
+    <Color x:Key="BorderDark">#555555</Color>
+    <Color x:Key="CanvasBackgroundLight">#FFFFFF</Color>
+    <Color x:Key="CanvasBackgroundDark">#2D2D30</Color>
+
+    <!-- Theme-aware brushes for app use -->
+    <SolidColorBrush x:Key="BackgroundBrush" Color="{AppThemeBinding Light={StaticResource BackgroundLight}, Dark={StaticResource BackgroundDark}}" />
+    <SolidColorBrush x:Key="TextBrush" Color="{AppThemeBinding Light={StaticResource TextLight}, Dark={StaticResource TextDark}}" />
+    <SolidColorBrush x:Key="BorderBrush" Color="{AppThemeBinding Light={StaticResource BorderLight}, Dark={StaticResource BorderDark}}" />
+    <SolidColorBrush x:Key="CanvasBackgroundBrush" Color="{AppThemeBinding Light={StaticResource CanvasBackgroundLight}, Dark={StaticResource CanvasBackgroundDark}}" />
+
     <SolidColorBrush x:Key="PrimaryBrush" Color="{StaticResource Primary}"/>
     <SolidColorBrush x:Key="SecondaryBrush" Color="{StaticResource Secondary}"/>
     <SolidColorBrush x:Key="TertiaryBrush" Color="{StaticResource Tertiary}"/>

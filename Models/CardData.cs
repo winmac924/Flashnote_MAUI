@@ -20,12 +20,22 @@ namespace Flashnote.Models
         public string imageFileName { get; set; } // 画像穴埋めカード用の画像ファイル名
         // PDF連携用
         public PdfReference PdfReference { get; set; } // PDF情報
+
+        // material 情報を保持（cards JSON に含まれる { "material": { "fileName": "...", "page": 1 } } を読み取る）
+        public Material material { get; set; }
     }
 
     public class PdfReference
     {
         public string PdfId { get; set; }      // PDFファイル名やID
         public int PageNumber { get; set; }    // ページ番号（1始まり）
+    }
+
+    // material JSON に対応するクラス
+    public class Material
+    {
+        public string fileName { get; set; }
+        public int page { get; set; }
     }
 
     public class ChoiceData
@@ -40,5 +50,12 @@ namespace Flashnote.Models
         public float y { get; set; }
         public float width { get; set; }
         public float height { get; set; }
+    }
+
+    // metadata.json の defaultMaterial に対応
+    public class DefaultMaterial
+    {
+        public bool isPDF { get; set; }
+        public string fileName { get; set; }
     }
 } 
