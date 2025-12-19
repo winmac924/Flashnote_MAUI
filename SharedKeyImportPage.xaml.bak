@@ -17,7 +17,7 @@
                    HorizontalOptions="Center"
                    Margin="0,0,0,20"/>
             
-            <Frame BorderColor="LightGray" BackgroundColor="Transparent" Padding="15" CornerRadius="10">
+            <Frame BackgroundColor="LightGray" Padding="15" CornerRadius="10">
                 <StackLayout Spacing="10">
                     <Label Text="共有キー" FontSize="16" FontAttributes="Bold"/>
                     <Entry x:Name="ShareKeyEntry" 
@@ -26,12 +26,12 @@
                 </StackLayout>
             </Frame>
             
-            <Frame BorderColor="LightYellow" BackgroundColor="Transparent" Padding="15" CornerRadius="10">
+            <Frame BackgroundColor="LightYellow" Padding="15" CornerRadius="10">
                 <StackLayout Spacing="10">
                     <Label Text="または、共有キーファイル（.fsk）を選択" FontSize="16" FontAttributes="Bold"/>
                     <Button Text="ファイルを選択" 
-                            BorderColor="Blue" 
-                            TextColor="BlueViolet"
+                            BackgroundColor="Blue" 
+                            TextColor="White"
                             HorizontalOptions="FillAndExpand"
                             Clicked="OnFileSelectClicked"/>
                     <Label x:Name="SelectedFileName" 
@@ -50,20 +50,20 @@
             
             <StackLayout Orientation="Horizontal" HorizontalOptions="FillAndExpand" Spacing="10">
                 <Button Text="キャンセル" 
-                        BorderColor="Gray" 
-                        TextColor="Gray"
+                        BackgroundColor="Gray" 
+                        TextColor="White"
                         HorizontalOptions="FillAndExpand"
                         Clicked="OnCancelClicked"/>
                         
                 <Button Text="プレビュー" 
-                        BorderColor="Orange" 
-                        TextColor="Orange"
+                        BackgroundColor="Orange" 
+                        TextColor="White"
                         HorizontalOptions="FillAndExpand"
                         Clicked="OnPreviewClicked"/>
                         
                 <Button Text="インポート" 
-                        BorderColor="Green" 
-                        TextColor="Green"
+                        BackgroundColor="Green" 
+                        TextColor="White"
                         HorizontalOptions="FillAndExpand"
                         Clicked="OnImportClicked"/>
             </StackLayout>

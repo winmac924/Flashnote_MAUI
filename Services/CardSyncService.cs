@@ -1,11 +1,6 @@
 using System.Text.Json;
 using System.Diagnostics;
 using System.IO.Compression;
-using System.Text.RegularExpressions;
-using System.IO;
-using System;
-using System.Collections.Generic;
-using System.Threading.Tasks;
 
 namespace Flashnote.Services
 {
@@ -33,63 +28,9 @@ namespace Flashnote.Services
             public bool IsDeleted { get; set; }
         }
 
-        private async Task<List<CardInfo>> ParseCardsFile(string content)
-        {
-            var cards = new List<CardInfo>();
-            if (string.IsNullOrEmpty(content)) return cards;
-            var lines = content.Split('\n', StringSplitOptions.RemoveEmptyEntries);
-            int startIndex = 0;
-            if (lines.Length > 0 && int.TryParse(lines[0], out _)) startIndex = 1;
-            for (int i = startIndex; i < lines.Length; i++)
-            {
-                try
-                {
-                    var line = lines[i].Trim();
-                    var parts = line.Split(',');
-                    if (parts.Length >= 2)
-                    {
-                        cards.Add(new CardInfo
-                        {
-                            Uuid = parts[0],
-                            LastModified = DateTime.ParseExact(parts[1].Trim(), "yyyy-MM-dd HH:mm:ss", null),
-                            IsDeleted = parts.Length >= 3 && parts[2].Trim() == "deleted"
-                        });
-                    }
-                }
-                catch
-                {
-                    // ignore malformed lines
-                }
-            }
-            await Task.Yield();
-            return cards;
-        }
-
-        private async Task<string> ReadLocalCardsFile(string notePath)
-        {
-            string tempDir;
-            if (notePath.Contains(Path.DirectorySeparatorChar))
-            {
-                var directoryName = Path.GetDirectoryName(notePath);
-                var fileName = Path.GetFileNameWithoutExtension(notePath);
-                tempDir = Path.Combine(_tempBasePath, directoryName, fileName + "_temp");
-            }
-            else
-            {
-                tempDir = Path.Combine(_tempBasePath, notePath + "_temp");
-            }
-            var cardsPath = Path.Combine(tempDir, "cards.txt");
-            if (File.Exists(cardsPath)) return await File.ReadAllTextAsync(cardsPath);
-            return string.Empty;
-        }
-
-        // --- Public sync methods ---
-        public async Task SyncNoteAsync(string uid, string noteName, string subFolder = null)
-        {
-            // For now, delegate to SyncNoteOnOpenAsync which provides compatible behavior
-            await SyncNoteOnOpenAsync(uid, noteName, subFolder);
-        }
-
+        /// <summary>
+        /// ノートを開く際の同期処理（MainPage → Confirmation）
+        /// </summary>
         public async Task SyncNoteOnOpenAsync(string uid, string noteName, string subFolder = null)
         {
             try
@@ -133,12 +74,9 @@ namespace Flashnote.Services
             await SyncSharedNotesAsync(uid);
         }
 
-        public async Task SyncLocalNotesAsync(string uid)
-        {
-            // For now, metadata-only
-            await SyncAllNotesMetadataAsync(uid);
-        }
-
+        /// <summary>
+        /// 共有ノートを同期する
+        /// </summary>
         public async Task SyncSharedNotesAsync(string uid)
         {
             try
@@ -175,6 +113,9 @@ namespace Flashnote.Services
             }
         }
 
+        /// <summary>
+        /// 共有ノートを同期する（単一ノート）
+        /// </summary>
         public async Task SyncSharedNoteAsync(string originalUserId, string notePath, string noteName, string subFolder = null)
         {
             // Minimal: download metadata.json if exists
@@ -198,21 +139,57 @@ namespace Flashnote.Services
             }
         }
 
+        /// <summary>
+        /// 共有フォルダを同期する
+        /// </summary>
         public async Task SyncSharedFolderAsync(string originalUserId, string folderPath, string shareKey)
         {
             try
             {
-                // Attempt to download folder metadata file if present at folder root
-                var metadata = await _blobStorage_service_unsafe_GetNoteContentAsync(originalUserId, folderPath + "/metadata.json", null);
-                if (!string.IsNullOrEmpty(metadata))
+                // フォルダID(UUID)を取得
+                var parts = folderPath?.Split(new[] { '/' }, StringSplitOptions.RemoveEmptyEntries);
+                if (parts == null || parts.Length == 0)
                 {
-                    var parts = folderPath.Split(new[] { '/' }, StringSplitOptions.RemoveEmptyEntries);
-                    var folderId = parts[^1];
-                    var parentDir = _localBasePath;
-                    Directory.CreateDirectory(parentDir);
-                    var folderDir = Path.Combine(parentDir, folderId);
-                    Directory.CreateDirectory(folderDir);
-                    File.WriteAllText(Path.Combine(folderDir, "metadata.json"), metadata);
+                    Debug.WriteLine("SyncSharedFolderAsync: folderPath が不正です");
+                    return;
+                }
+                var folderId = parts[^1];
+
+                // 通常フォルダと同様のアクセス方法: 
+                // uid だけが originalUserId に変わる
+                // subFolder=folderId, noteName="metadata.json"
+                var metadata = await _blobStorage_service_unsafe_GetNoteContentAsync(
+                    originalUserId,      // ← 通常は uid、共有では originalUserId
+                    "metadata.json",     // ← noteName
+                    folderId);           // ← subFolder (UUID)
+
+                if (string.IsNullOrEmpty(metadata))
+                {
+                    Debug.WriteLine($"SyncSharedFolderAsync: metadata が取得できませんでした (user={originalUserId}, folderId={folderId})");
+                    return;
+                }
+
+                // ローカル保存 (Documents\Flashnote\{FolderUUID}\metadata.json)
+                var parentDir = _localBasePath;
+                Directory.CreateDirectory(parentDir);
+                var folderDir = Path.Combine(parentDir, folderId);
+                Directory.CreateDirectory(folderDir);
+                var localMetaPath = Path.Combine(folderDir, "metadata.json");
+                File.WriteAllText(localMetaPath, metadata);
+                Debug.WriteLine($"SyncSharedFolderAsync: フォルダメタデータを保存しました -> {localMetaPath}");
+
+                // LocalApplicationData 側にもコピー
+                try
+                {
+                    var tempMetaDir = Path.Combine(_tempBasePath, folderId);
+                    Directory.CreateDirectory(tempMetaDir);
+                    var tempMetaPath = Path.Combine(tempMetaDir, "metadata.json");
+                    File.WriteAllText(tempMetaPath, metadata);
+                    Debug.WriteLine($"SyncSharedFolderAsync: 一時メタデータも保存しました -> {tempMetaPath}");
+                }
+                catch (Exception exMeta)
+                {
+                    Debug.WriteLine($"SyncSharedFolderAsync: 一時メタデータ保存に失敗しました: {exMeta.Message}");
                 }
             }
             catch (Exception ex)
@@ -446,6 +423,9 @@ namespace Flashnote.Services
             }
         }
 
+        /// <summary>
+        /// 特定のサブフォルダ内のノートのみを同期する
+        /// </summary>
         public async Task SyncSubFolderMetadataAsync(string uid, string subFolder)
         {
             try
@@ -620,10 +600,96 @@ namespace Flashnote.Services
             }
         }
 
-        // Lightweight image sync - no-op for now
+        /// <summary>
+        /// ノートを開く際の画像同期処理
+        /// </summary>
         private async Task SyncImagesOnNoteOpenAsync(string uid, string noteName, string subFolder, string localCardsPath)
         {
-            await Task.CompletedTask;
+            try
+            {
+                Debug.WriteLine($"=== ノート開時画像同期開始: {noteName} ===");
+
+                // ローカルのimgフォルダのパスを取得
+                var localImgDir = Path.Combine(Path.GetDirectoryName(localCardsPath), "img");
+                Debug.WriteLine($"ローカルのimgフォルダのパス: {localImgDir}");
+
+                // ローカルのimgフォルダが存在しない場合は作成
+                if (!Directory.Exists(localImgDir))
+                {
+                    Directory.CreateDirectory(localImgDir);
+                    Debug.WriteLine($"ローカルimgディレクトリを作成: {localImgDir}");
+                }
+
+                // サーバーのimgフォルダパスを構築
+                string imgServerPath;
+                if (!string.IsNullOrEmpty(subFolder))
+                {
+                    imgServerPath = $"{subFolder}/{noteName}/img";
+                }
+                else
+                {
+                    imgServerPath = $"{noteName}/img";
+                }
+
+                // サーバーの画像ファイル一覧を取得
+                var serverImgFiles = await _blobStorageService.GetImageFilesAsync(uid, imgServerPath);
+                Debug.WriteLine($"サーバーの画像ファイル数: {serverImgFiles.Count}");
+
+                if (serverImgFiles.Count == 0)
+                {
+                    Debug.WriteLine("サーバーに画像ファイルがありません");
+                    return;
+                }
+
+                // ローカルの画像ファイル一覧を取得
+                var localImgFiles = Directory.GetFiles(localImgDir, "img_*.jpg")
+                    .Select(Path.GetFileName)
+                    .ToList();
+                Debug.WriteLine($"ローカルの画像ファイル数: {localImgFiles.Count}");
+
+                // 不足している画像ファイルを特定
+                var missingImgFiles = serverImgFiles.Where(serverImg => !localImgFiles.Contains(serverImg)).ToList();
+                Debug.WriteLine($"不足している画像ファイル数: {missingImgFiles.Count}");
+
+                if (missingImgFiles.Count == 0)
+                {
+                    Debug.WriteLine("不足している画像ファイルはありません");
+                    return;
+                }
+
+                // 不足している画像ファイルをダウンロード
+                foreach (var imgFile in missingImgFiles)
+                {
+                    try
+                    {
+                        Debug.WriteLine($"画像ファイルのダウンロード開始: {imgFile}");
+                        var imgBytes = await _blobStorageService.GetImageBinaryAsync(uid, imgFile, imgServerPath);
+
+                        if (imgBytes != null)
+                        {
+                            var localImgPath = Path.Combine(localImgDir, imgFile);
+                            await File.WriteAllBytesAsync(localImgPath, imgBytes);
+                            Debug.WriteLine($"画像ファイルをダウンロード完了: {imgFile} (サイズ: {imgBytes.Length} バイト)");
+                        }
+                        else
+                        {
+                            Debug.WriteLine($"画像ファイルのコンテンツが取得できません: {imgFile}");
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        Debug.WriteLine($"画像ファイルのダウンロード中にエラー: {imgFile}, エラー: {ex.Message}");
+                        Debug.WriteLine($"スタックトレース: {ex.StackTrace}");
+                    }
+                }
+
+                Debug.WriteLine($"=== ノート開時画像同期完了: {noteName} ===");
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"ノート開時画像同期エラー: {ex.Message}");
+                // 画像同期エラーは致命的ではないため、例外を再スローしない
+            }
         }
 
         // --- Unsafe wrappers that call BlobStorageService methods via reflection to tolerate signature differences ---
@@ -725,135 +791,6 @@ namespace Flashnote.Services
             {
                 Debug.WriteLine($"_blobStorage_service_unsafe_GetNoteContentAsync error: {ex.Message}");
                 return null;
-            }
-        }
-
-        public async Task DownloadMetadataAsync(string uid, string path, bool isFolder)
-        {
-            try
-            {
-                // Construct the metadata path
-                string metadataPath = isFolder ? Path.Combine(path, "metadata.json") : Path.Combine(Path.GetDirectoryName(path), "metadata.json");
-
-                // Fetch metadata.json from BlobStorage
-                string metadataContent = await _blobStorage_service_unsafe_GetNoteContentAsync(uid, "metadata.json", path);
-
-                if (!string.IsNullOrEmpty(metadataContent))
-                {
-                    // Ensure the directory exists
-                    Directory.CreateDirectory(Path.GetDirectoryName(metadataPath));
-
-                    // Save metadata.json locally
-                    File.WriteAllText(metadataPath, metadataContent);
-                    Debug.WriteLine($"metadata.json saved at {metadataPath}");
-                }
-                else
-                {
-                    Debug.WriteLine($"No metadata.json found for path: {path}");
-                }
-            }
-            catch (Exception ex)
-            {
-                Debug.WriteLine($"Error downloading metadata.json for path: {path} - {ex.Message}");
-            }
-        }
-
-        public async Task ShallowSyncMetadataOnly(string uid)
-        {
-            Debug.WriteLine("=====================================");
-            Debug.WriteLine("軽量同期開始（metadata.jsonのみ、再帰サブフォルダ対応）");
-            Debug.WriteLine("=====================================");
-
-            try
-            {
-                var blobs = await _blobStorage_service_unsafe_GetNoteListAsync(uid);
-                if (blobs == null || blobs.Count == 0)
-                {
-                    Debug.WriteLine("No blobs found for the user.");
-                    return;
-                }
-
-                foreach (var blobPath in blobs)
-                {
-                    if (!blobPath.EndsWith("metadata.json", StringComparison.OrdinalIgnoreCase))
-                        continue;
-
-                    Debug.WriteLine($"Processing metadata blob: {blobPath}");
-
-                    try
-                    {
-                        var parsed = _blobStorage_service_unsafe_ParseBlobPath(blobPath);
-                        var subFolder = parsed.subFolder;
-                        var noteName = parsed.noteName;
-
-                        string metadataContent = await _blobStorage_service_unsafe_GetNoteContentAsync(uid, noteName + "/metadata.json", subFolder);
-                        if (string.IsNullOrEmpty(metadataContent))
-                        {
-                            Debug.WriteLine($"No metadata content found for {blobPath}");
-                            continue;
-                        }
-
-                        using var doc = JsonDocument.Parse(metadataContent);
-                        var root = doc.RootElement;
-                        var isFolder = root.TryGetProperty("isFolder", out var pIsFolder) && pIsFolder.GetBoolean();
-                        var originalName = root.TryGetProperty("originalName", out var pOrig) ? pOrig.GetString() : noteName;
-                        var id = root.TryGetProperty("id", out var pId) ? pId.GetString() : null;
-                        var metaSub = root.TryGetProperty("subfolder", out var pSub) ? pSub.GetString() : subFolder;
-
-                        Debug.WriteLine($"Metadata parsed: isFolder={isFolder}, originalName={originalName}, id={id}, metaSub={metaSub}");
-
-                        var localBase = _localBasePath;
-                        var tempBase = _tempBasePath;
-
-                        if (isFolder)
-                        {
-                            var folderId = id ?? noteName;
-                            var parentDir = string.IsNullOrEmpty(metaSub) ? localBase : Path.Combine(localBase, metaSub);
-                            Directory.CreateDirectory(parentDir);
-                            var folderDir = Path.Combine(parentDir, folderId);
-                            Directory.CreateDirectory(folderDir);
-                            File.WriteAllText(Path.Combine(folderDir, "metadata.json"), metadataContent);
-                            Debug.WriteLine($"Saved folder metadata to {Path.Combine(folderDir, "metadata.json")}");
-                        }
-                        else
-                        {
-                            var parentDir = string.IsNullOrEmpty(metaSub) ? localBase : Path.Combine(localBase, metaSub);
-                            Directory.CreateDirectory(parentDir);
-
-                            var fileId = string.IsNullOrEmpty(id) ? (originalName ?? noteName) : id;
-
-                            var tempDir = Path.Combine(tempBase, metaSub ?? string.Empty, fileId + "_temp");
-                            if (Directory.Exists(tempDir))
-                            {
-                                try { Directory.Delete(tempDir, true); } catch { }
-                            }
-                            Directory.CreateDirectory(tempDir);
-
-                            var metaPath = Path.Combine(tempDir, "metadata.json");
-                            File.WriteAllText(metaPath, metadataContent);
-
-                            var ankplsPath = Path.Combine(parentDir, fileId + ".ankpls");
-                            if (File.Exists(ankplsPath))
-                            {
-                                try { File.Delete(ankplsPath); } catch { }
-                            }
-
-                            ZipFile.CreateFromDirectory(tempDir, ankplsPath);
-                            Debug.WriteLine($"Created .ankpls with metadata at {ankplsPath} (id={fileId})");
-                        }
-                    }
-                    catch (Exception ex)
-                    {
-                        Debug.WriteLine($"Error processing metadata blob {blobPath}: {ex.Message}");
-                    }
-                }
-
-                Debug.WriteLine("軽量同期完了");
-            }
-            catch (Exception ex)
-            {
-                Debug.WriteLine($"軽量同期中にエラー: {ex.Message}");
-                throw;
             }
         }
     }

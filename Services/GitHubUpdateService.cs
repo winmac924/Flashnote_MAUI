@@ -355,6 +355,7 @@ public class GitHubUpdateService
             // アップデート用バッチファイルを作成（英語メッセージでエンコーディング問題を回避）
             var batchPath = Path.Combine(Path.GetTempPath(), "Flashnote_Update.bat");
             var batchContent = $@"@echo off
+chcp 65001 >nul
 title Flashnote Update
 echo.
 echo   Flashnote Update in Progress...
@@ -396,7 +397,7 @@ REM Delete batch file itself
 del ""%~f0""
 ";
 
-            await File.WriteAllTextAsync(batchPath, batchContent, System.Text.Encoding.UTF8);
+            await File.WriteAllTextAsync(batchPath, batchContent, new System.Text.UTF8Encoding(false));
             _logger.LogInformation("アップデートバッチファイルを作成: {BatchPath}", batchPath);
 
             // バッチファイルを実行
@@ -521,4 +522,4 @@ public class DownloadProgress
     public string Status { get; set; } = string.Empty;
     public double ProgressPercentage { get; set; }
     public string Detail { get; set; } = string.Empty;
-} 
+}

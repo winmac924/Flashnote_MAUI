@@ -118,8 +118,7 @@
                <!-- その他のアクション -->
                <Frame CornerRadius="12" 
                       Padding="20"
-                      HasShadow="True"
-                      BackgroundColor="{AppThemeBinding Light=White, Dark=#1E1E1E}">
+                      HasShadow="True">
                    <VerticalStackLayout Spacing="15">
                        <Grid ColumnDefinitions="*,*" ColumnSpacing="10">
                            <!-- NotePage遷移ボタン -->

@@ -63,16 +63,37 @@ namespace Flashnote
             if (string.IsNullOrEmpty(shareKey))
             {
                 StatusLabel.Text = "共有キーを入力してください。";
+                StatusLabel.TextColor = Colors.Red;
                 return;
             }
 
             LoadingIndicator.IsVisible = true;
             LoadingIndicator.IsRunning = true;
             StatusLabel.Text = "共有キーを確認中...";
+            StatusLabel.TextColor = Colors.Blue;
 
             try
             {
-                var (userId, notePath, isFolder) = await _blobStorageService.AccessNoteWithShareKeyAsync(shareKey);
+                Debug.WriteLine($"=== 共有キープレビュー開始 ===");
+                Debug.WriteLine($"入力された共有キー: {shareKey}");
+                Debug.WriteLine($"共有キーの長さ: {shareKey.Length}");
+                
+                // UUIDの形式チェック
+                var normalizedKey = shareKey.ToUpperInvariant();
+                if (!Guid.TryParse(normalizedKey, out var guid))
+                {
+                    Debug.WriteLine($"無効なUUID形式: {shareKey}");
+                    StatusLabel.Text = "無効な共有キー形式です。\nUUID形式で入力してください。";
+                    StatusLabel.TextColor = Colors.Red;
+                    return;
+                }
+                
+                Debug.WriteLine($"正規化された共有キー（大文字）: {normalizedKey}");
+                Debug.WriteLine($"GUID形式: {guid:D}");
+                
+                var (userId, notePath, isFolder) = await _blobStorageService.AccessNoteWithShareKeyAsync(normalizedKey);
+                
+                Debug.WriteLine($"共有キー検証成功 - userId: {userId}, notePath: {notePath}, isFolder: {isFolder}");
                 
                 _previewedUserId = userId;
                 _previewedNotePath = notePath;
@@ -85,8 +106,12 @@ namespace Flashnote
             }
             catch (Exception ex)
             {
-                Debug.WriteLine($"共有キーのプレビューに失敗: {ex.Message}");
-                StatusLabel.Text = "共有キーが無効です。";
+                Debug.WriteLine($"=== 共有キープレビューエラー ===");
+                Debug.WriteLine($"エラーの種類: {ex.GetType().Name}");
+                Debug.WriteLine($"エラーメッセージ: {ex.Message}");
+                Debug.WriteLine($"スタックトレース: {ex.StackTrace}");
+                
+                StatusLabel.Text = $"共有キーが無効です。\nエラー: {ex.Message}";
                 StatusLabel.TextColor = Colors.Red;
                 InfoFrame.IsVisible = false;
             }
@@ -244,4 +269,4 @@ namespace Flashnote
             await Navigation.PopAsync();
         }
     }
-} 
+}

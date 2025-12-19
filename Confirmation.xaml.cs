@@ -391,21 +391,140 @@ namespace Flashnote
         {
             base.OnAppearing();
 
-            // uid の設定
-            string uid;
+            // SharedKeyService インスタンスを取得
             var sharedKeyService = new SharedKeyService();
 
-            if (sharedKeyService.IsSharedNote(ankplsFilePath)) // 共有されたノートかどうかを判定
+            // 共有ノート情報を取得
+            string uid;
+            string originalUserId = null;
+            bool isSharedNote = false;
+            string noteId = null; // UUID (metadata.json の id)
+            
+            // 1. ノートパスから共有チェック（直接共有されたノート）
+            if (sharedKeyService.IsSharedNote(ankplsFilePath))
             {
                 var sharedInfo = sharedKeyService.GetSharedNoteInfo(ankplsFilePath);
-                uid = sharedInfo?.OriginalUserId ?? throw new Exception("共有元のユーザーIDが取得できませんでした");
+                if (sharedInfo != null)
+                {
+                    originalUserId = sharedInfo.OriginalUserId;
+                    uid = originalUserId;
+                    isSharedNote = true;
+                    Debug.WriteLine($"直接共有されたノート: uid={uid}");
+                }
+                else
+                {
+                    uid = App.CurrentUser?.Uid ?? throw new Exception("現在のユーザーIDが取得できませんでした");
+                    Debug.WriteLine($"共有情報が取得できませんでした。通常のuidを使用: {uid}");
+                }
             }
             else
             {
-                uid = App.CurrentUser?.Uid ?? throw new Exception("現在のユーザーIDが取得できませんでした");
+                // 2. フォルダ共有されているかをチェック
+                try
+                {
+                    var documentsPath = Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments);
+                    var flashnotePath = Path.Combine(documentsPath, "Flashnote");
+                    var noteDirectory = Path.GetDirectoryName(ankplsFilePath);
+                    
+                    if (!string.IsNullOrEmpty(noteDirectory))
+                    {
+                        var relativePath = Path.GetRelativePath(flashnotePath, noteDirectory);
+                        if (!string.IsNullOrEmpty(relativePath) && relativePath != ".")
+                        {
+                            // サブフォルダ内のノート → フォルダが共有されているかチェック
+                            if (sharedKeyService.IsInSharedFolder("", relativePath))
+                            {
+                                // フォルダが共有されている → 親フォルダの共有情報を取得
+                                var folderSharedInfo = sharedKeyService.GetSharedNoteInfo(relativePath);
+                                if (folderSharedInfo != null)
+                                {
+                                    originalUserId = folderSharedInfo.OriginalUserId;
+                                    uid = originalUserId;
+                                    isSharedNote = true;
+                                    Debug.WriteLine($"フォルダ共有されたノート: uid={uid}, folder={relativePath}");
+                                }
+                                else
+                                {
+                                    uid = App.CurrentUser?.Uid ?? throw new Exception("現在のユーザーIDが取得できませんでした");
+                                    Debug.WriteLine($"フォルダ共有情報が取得できませんでした。通常のuidを使用: {uid}");
+                                }
+                            }
+                            else
+                            {
+                                // 通常のサブフォルダ
+                                uid = App.CurrentUser?.Uid ?? throw new Exception("現在のユーザーIDが取得できませんでした");
+                                Debug.WriteLine($"通常のサブフォルダノート: uid={uid}");
+                            }
+                        }
+                        else
+                        {
+                            // ルートフォルダのノート
+                            uid = App.CurrentUser?.Uid ?? throw new Exception("現在のユーザーIDが取得できませんでした");
+                            Debug.WriteLine($"ルートフォルダのノート: uid={uid}");
+                        }
+                    }
+                    else
+                    {
+                        uid = App.CurrentUser?.Uid ?? throw new Exception("現在のユーザーIDが取得できませんでした");
+                        Debug.WriteLine($"ノートディレクトリが不明。通常のuidを使用: {uid}");
+                    }
+                }
+                catch (Exception ex)
+                {
+                    Debug.WriteLine($"フォルダ共有チェック中にエラー: {ex.Message}");
+                    uid = App.CurrentUser?.Uid ?? throw new Exception("現在のユーザーIDが取得できませんでした");
+                }
             }
 
             string noteName = Path.GetFileNameWithoutExtension(ankplsFilePath);
+
+            // metadata.json から noteId (UUID) を取得
+            try
+            {
+                var metadataPath = Path.Combine(tempExtractPath, "metadata.json");
+                if (File.Exists(metadataPath))
+                {
+                    var metadataJson = File.ReadAllText(metadataPath);
+                    using var doc = JsonDocument.Parse(metadataJson);
+                    if (doc.RootElement.TryGetProperty("id", out var idProp))
+                    {
+                        noteId = idProp.GetString();
+                        Debug.WriteLine($"metadata.json から noteId を取得: {noteId}");
+                    }
+                }
+                else
+                {
+                    // .ankpls から metadata.json を読み込む
+                    if (File.Exists(ankplsFilePath))
+                    {
+                        using var archive = ZipFile.OpenRead(ankplsFilePath);
+                        var metaEntry = archive.Entries.FirstOrDefault(e => e.Name.Equals("metadata.json", StringComparison.OrdinalIgnoreCase));
+                        if (metaEntry != null)
+                        {
+                            using var s = metaEntry.Open();
+                            using var sr = new StreamReader(s);
+                            var metaJson = sr.ReadToEnd();
+                            using var doc = JsonDocument.Parse(metaJson);
+                            if (doc.RootElement.TryGetProperty("id", out var idProp))
+                            {
+                                noteId = idProp.GetString();
+                                Debug.WriteLine($".ankpls から noteId を取得: {noteId}");
+                            }
+                        }
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"noteId 取得中にエラー: {ex.Message}");
+            }
+
+            // noteId がない場合は noteName をフォールバック
+            if (string.IsNullOrEmpty(noteId))
+            {
+                noteId = noteName;
+                Debug.WriteLine($"noteId が取得できなかったため noteName を使用: {noteId}");
+            }
 
             // compute relative subfolder (relative to Documents/Flashnote) for remote calls
             string subFolder = null;
@@ -434,28 +553,200 @@ namespace Flashnote
             {
                 var blobService = new BlobStorageService();
 
-                // If this note is shared (exists in shared keys), use shared download API so that cards/img are fetched
-                if (sharedKeyService.IsSharedNote(ankplsFilePath))
+                // 共有ノート（直接共有またはフォルダ共有）の場合
+                if (isSharedNote)
                 {
-                    var info = sharedKeyService.GetSharedNoteInfo(ankplsFilePath);
+                    Debug.WriteLine($"=== 共有ノートのカード・画像ダウンロード開始 ===");
+                    Debug.WriteLine($"uid={uid}, noteId={noteId}, subFolder={subFolder}");
+                    
                     try
                     {
-                        Debug.WriteLine($"Downloading shared note: user={info?.OriginalUserId}, path={info?.NotePath}, note={noteName}");
-                        await blobService.DownloadSharedNoteAsync(info.OriginalUserId, info.NotePath, noteName, subFolder);
-                        Debug.WriteLine("DownloadSharedNoteAsync 完了");
+                        // UUID形式かどうかをチェック（新形式 vs 旧形式）
+                        bool isUuidFormat = Guid.TryParse(noteId, out _);
+                        Debug.WriteLine($"UUID形式チェック: {isUuidFormat}");
+                        
+                        // 1. cards.txt をダウンロード
+                        string cardsContent = null;
+                        try
+                        {
+                            // 新形式（UUID）: フラット構造 {uid}/{noteId}/cards.txt
+                            // 旧形式: 階層構造 {uid}/{subFolder}/{noteId}/cards.txt
+                            string cardsSubFolder = isUuidFormat ? noteId : 
+                                (string.IsNullOrEmpty(subFolder) ? noteId : $"{subFolder}/{noteId}");
+                            
+                            Debug.WriteLine($"cards.txt取得パス: uid={uid}, subFolder={cardsSubFolder}");
+                            cardsContent = await blobService.GetUserFileAsync(uid, "cards.txt", cardsSubFolder);
+                            
+                            Debug.WriteLine($"cards.txt 取得結果: {(cardsContent != null ? $"成功 ({cardsContent.Length} 文字)" : "失敗")}");
+                        }
+                        catch (Exception ex)
+                        {
+                            Debug.WriteLine($"cards.txt 取得エラー: {ex.Message}");
+                        }
+
+                        if (!string.IsNullOrEmpty(cardsContent))
+                        {
+                            // cards.txt をローカルに保存
+                            var localCardsPath = Path.Combine(tempExtractPath, "cards.txt");
+                            try
+                            {
+                                File.WriteAllText(localCardsPath, cardsContent);
+                                Debug.WriteLine($"cards.txt をローカルに保存: {localCardsPath}");
+                            }
+                            catch (Exception ex)
+                            {
+                                Debug.WriteLine($"cards.txt 保存エラー: {ex.Message}");
+                            }
+
+                            // 2. cards.txt を解析してカードファイルをダウンロード
+                            var cardsDir = Path.Combine(tempExtractPath, "cards");
+                            if (!Directory.Exists(cardsDir))
+                            {
+                                Directory.CreateDirectory(cardsDir);
+                                Debug.WriteLine($"cards ディレクトリを作成: {cardsDir}");
+                            }
+
+                            var lines = cardsContent.Split('\n', StringSplitOptions.RemoveEmptyEntries);
+                            int startIndex = 0;
+                            
+                            // 1行目がカード数の場合はスキップ
+                            if (lines.Length > 0 && int.TryParse(lines[0], out _))
+                            {
+                                startIndex = 1;
+                            }
+
+                            Debug.WriteLine($"カードファイルのダウンロード開始 - 処理対象行数: {lines.Length - startIndex}");
+
+                            for (int i = startIndex; i < lines.Length; i++)
+                            {
+                                var line = lines[i].Trim();
+                                var parts = line.Split(',');
+                                if (parts.Length >= 1)
+                                {
+                                    var cardId = parts[0];
+                                    var localCardPath = Path.Combine(cardsDir, $"{cardId}.json");
+
+                                    // 既存のカードファイルがある場合はスキップ
+                                    if (File.Exists(localCardPath) && new FileInfo(localCardPath).Length > 5)
+                                    {
+                                        Debug.WriteLine($"既存のカードファイルをスキップ: {cardId}");
+                                        continue;
+                                    }
+
+                                    // 削除フラグがある場合はローカルファイルを削除
+                                    bool isDeleted = parts.Any(p => p.Trim().Equals("deleted", StringComparison.OrdinalIgnoreCase));
+                                    if (isDeleted)
+                                    {
+                                        if (File.Exists(localCardPath))
+                                        {
+                                            try
+                                            {
+                                                File.Delete(localCardPath);
+                                                Debug.WriteLine($"削除フラグ検出: ローカルカードを削除: {cardId}");
+                                            }
+                                            catch (Exception ex)
+                                            {
+                                                Debug.WriteLine($"ローカルカード削除エラー: {ex.Message}");
+                                            }
+                                        }
+                                        continue;
+                                    }
+
+                                    // カードファイルをダウンロード
+                                    try
+                                    {
+                                        // 新形式（UUID）: フラット構造 {uid}/{noteId}/cards/{cardId}.json
+                                        // 旧形式: 階層構造 {uid}/{subFolder}/{noteId}/cards/{cardId}.json
+                                        string cardSubFolder = isUuidFormat ? $"{noteId}/cards" : 
+                                            (string.IsNullOrEmpty(subFolder) ? $"{noteId}/cards" : $"{subFolder}/{noteId}/cards");
+                                        
+                                        Debug.WriteLine($"カード取得パス: uid={uid}, file={cardId}.json, subFolder={cardSubFolder}");
+                                        var cardContent = await blobService.GetUserFileAsync(uid, $"{cardId}.json", cardSubFolder);
+
+                                        if (!string.IsNullOrEmpty(cardContent))
+                                        {
+                                            File.WriteAllText(localCardPath, cardContent);
+                                            Debug.WriteLine($"カードファイルをダウンロード: {cardId}");
+                                        }
+                                        else
+                                        {
+                                            Debug.WriteLine($"カードファイルが空: {cardId}");
+                                        }
+                                    }
+                                    catch (Exception ex)
+                                    {
+                                        Debug.WriteLine($"カードファイルダウンロードエラー ({cardId}): {ex.Message}");
+                                    }
+                                }
+                            }
+                        }
+
+                        // 3. 画像フォルダをダウンロード
+                        Debug.WriteLine($"画像フォルダのダウンロード開始");
+                        var imgDir = Path.Combine(tempExtractPath, "img");
+                        if (!Directory.Exists(imgDir))
+                        {
+                            Directory.CreateDirectory(imgDir);
+                            Debug.WriteLine($"img ディレクトリを作成: {imgDir}");
+                        }
+
+                        try
+                        {
+                            // 新形式（UUID）: フラット構造 {uid}/{noteId}/img
+                            // 旧形式: 階層構造 {uid}/{subFolder}/{noteId}/img
+                            string imageFolderBlobPath = isUuidFormat ? $"{noteId}/img" : 
+                                (string.IsNullOrEmpty(subFolder) ? $"{noteId}/img" : $"{subFolder}/{noteId}/img");
+                            
+                            Debug.WriteLine($"画像フォルダ取得パス: uid={uid}, path={imageFolderBlobPath}");
+                            var imageFiles = await blobService.GetImageFilesAsync(uid, imageFolderBlobPath);
+                            Debug.WriteLine($"画像ファイル一覧取得: {imageFiles.Count} 個");
+
+                            foreach (var imgFile in imageFiles)
+                            {
+                                try
+                                {
+                                    var localImgPath = Path.Combine(imgDir, imgFile);
+                                    
+                                    // 既存の画像ファイルがある場合はスキップ
+                                    if (File.Exists(localImgPath))
+                                    {
+                                        Debug.WriteLine($"既存の画像ファイルをスキップ: {imgFile}");
+                                        continue;
+                                    }
+
+                                    var imgBytes = await blobService.GetImageBinaryAsync(uid, imgFile, imageFolderBlobPath);
+                                    if (imgBytes != null && imgBytes.Length > 0)
+                                    {
+                                        await File.WriteAllBytesAsync(localImgPath, imgBytes);
+                                        Debug.WriteLine($"画像ファイルをダウンロード: {imgFile} ({imgBytes.Length} バイト)");
+                                    }
+                                }
+                                catch (Exception ex)
+                                {
+                                    Debug.WriteLine($"画像ファイルダウンロードエラー ({imgFile}): {ex.Message}");
+                                }
+                            }
+                        }
+                        catch (Exception ex)
+                        {
+                            Debug.WriteLine($"画像フォルダダウンロードエラー: {ex.Message}");
+                        }
+
+                        Debug.WriteLine($"=== 共有ノートのカード・画像ダウンロード完了 ===");
                     }
-                    catch (Exception dex)
+                    catch (Exception syncEx)
                     {
-                        Debug.WriteLine($"共有ノートのダウンロード中にエラー: {dex.Message}");
+                        Debug.WriteLine($"共有ノート同期中にエラー: {syncEx.Message}");
                     }
                 }
                 else
                 {
-                    // Non-shared note: create local note (downloads cards.txt and card JSONs)
+                    // 通常のノート（自分のノート）
+                    Debug.WriteLine($"通常のノートとして同期: uid={uid}, noteName={noteName}, subFolder={subFolder}");
+                    
+                    var cardSyncService = new CardSyncService(new BlobStorageService());
                     try
                     {
-                        Debug.WriteLine($"Creating local note from server: uid={uid}, note={noteName}, subFolder={subFolder}");
-                        var cardSyncService = new CardSyncService(new BlobStorageService());
                         await cardSyncService.SyncNoteOnOpenAsync(uid, noteName, subFolder);
                         Debug.WriteLine("SyncNoteOnOpenAsync が正常に呼び出されました。");
                         await blobService.CreateLocalNoteAsync(uid, noteName, subFolder);

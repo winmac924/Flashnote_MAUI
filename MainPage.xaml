@@ -47,6 +47,7 @@
                 <Setter Property="BackgroundColor" Value="Transparent"/>
                 <Setter Property="WidthRequest" Value="45"/>
                 <Setter Property="HeightRequest" Value="45"/>
+                <Setter Property="FontFamily" Value="FluentUI"/>
                 <Setter Property="VisualStateManager.VisualStateGroups">
                     <VisualStateGroupList>
                         <VisualStateGroup x:Name="CommonStates">
@@ -73,6 +74,7 @@
                 <Setter Property="WidthRequest" Value="56"/>
                 <Setter Property="HeightRequest" Value="56"/>
                 <Setter Property="FontSize" Value="24"/>
+                <Setter Property="FontFamily" Value="FluentUI"/>
                 <Setter Property="VisualStateManager.VisualStateGroups">
                     <VisualStateGroupList>
                         <VisualStateGroup x:Name="CommonStates">
@@ -98,7 +100,7 @@
         <!-- モダンなヘッダー -->
         <Frame Grid.Row="0" 
                HasShadow="True" 
-               BackgroundColor="{AppThemeBinding Dark={StaticResource DarkHeaderBackground}}" 
+               BackgroundColor="{AppThemeBinding Dark={StaticResource BackgroundDark}}" 
                CornerRadius="0" 
                Padding="5">
             <Grid>
@@ -125,53 +127,63 @@
                 <Button Text="学習"
                         Grid.Column="2"
                         Style="{StaticResource ModernButtonStyle}"
-                        FontFamily="FluentUI"
                         Clicked="OnAnkiModeClicked"/>
 
                 <!-- インポートドロップダウン -->
                 <Button x:Name="ImportDropdownButton"
                         Grid.Column="3"
-                        Text="{x:Static fonts:FluentUI.arrow_down_48_regular}"
                         FontFamily="FluentUI"
                         FontSize="20"
                         Style="{StaticResource ModernButtonStyle}"
-                        Clicked="OnImportDropdownClicked"/>
+                        Clicked="OnImportDropdownClicked">
+                    <Button.Text>
+                        <x:Static Member="fonts:FluentUI.arrow_down_48_regular"/>
+                    </Button.Text>
+                </Button>
                 
                 <!-- 同期ボタン -->
-                <Button Text="{x:Static fonts:FluentUI.arrow_sync_24_regular}"
-                        Grid.Column="4"
+                <Button Grid.Column="4"
                         FontFamily="FluentUI"
                         FontSize="20"
                         Style="{StaticResource ModernButtonStyle}"
-                        Clicked="OnSyncClicked"/>
+                        Clicked="OnSyncClicked">
+                    <Button.Text>
+                        <x:Static Member="fonts:FluentUI.arrow_sync_24_regular"/>
+                    </Button.Text>
+                </Button>
                 
                 <!-- サブフォルダ同期ボタン -->
                 <Button x:Name="SubFolderSyncButton"
                         Text="📁 同期"
                         Grid.Column="5"
-                        FontFamily="FluentUI"
                         FontSize="16"
                         Style="{StaticResource ModernButtonStyle}"
                         IsVisible="False"
                         Clicked="OnSubFolderSyncClicked"/>
                                 
                 <!-- ヘルプボタン -->
-                <Button Text="{x:Static fonts:FluentUI.question_circle_24_regular}"
-                        Grid.Column="6"
+                <Button Grid.Column="6"
                         FontFamily="FluentUI"
                         FontSize="18" 
                         Style="{StaticResource IconButtonStyle}"
                         WidthRequest="42"
                         HeightRequest="42"
-                        Clicked="OnHelpClicked"/>
+                        Clicked="OnHelpClicked">
+                    <Button.Text>
+                        <x:Static Member="fonts:FluentUI.question_circle_24_regular"/>
+                    </Button.Text>
+                </Button>
                                 
                 <!-- 設定ボタン -->
-                <Button Text="{x:Static fonts:FluentUI.settings_24_regular}"
-                        Grid.Column="7"
+                <Button Grid.Column="7"
                         FontFamily="FluentUI"
                         FontSize="20" 
                         Style="{StaticResource IconButtonStyle}"
-                        Clicked="OnSettingsClicked"/>
+                        Clicked="OnSettingsClicked">
+                    <Button.Text>
+                        <x:Static Member="fonts:FluentUI.settings_24_regular"/>
+                    </Button.Text>
+                </Button>
             </Grid>
         </Frame>
         
@@ -297,13 +309,15 @@
             
             <!-- フローティング・アクション・ボタン（新規作成） -->
             <Button x:Name="FabCreateButton"
-                    Text="{x:Static fonts:FluentUI.add_24_regular}"
-                    FontFamily="FluentUI"
                     Style="{StaticResource FabButtonStyle}"
                     HorizontalOptions="End"
                     VerticalOptions="End"
                     Margin="20,20,20,20"
-                    Clicked="OnFabCreateClicked"/>
+                    Clicked="OnFabCreateClicked">
+                <Button.Text>
+                    <x:Static Member="fonts:FluentUI.add_24_regular"/>
+                </Button.Text>
+            </Button>
             
             <!-- 新規作成ポップアップメニュー -->
             <Frame x:Name="CreatePopupFrame"

@@ -1,22 +1,22 @@
-<?xml version="1.0" encoding="UTF-8"?>
-<svg width="1024" height="1024" viewBox="0 0 1024 1024" xmlns="http://www.w3.org/2000/svg">
-
-  <!-- カード/ノートのアイコン -->
-  <rect x="256" y="224" width="512" height="576" rx="32" fill="white" stroke="#3A1B9A" stroke-width="16"/>
-  
-  <!-- カードの線（テキストを表す） -->
-  <rect x="288" y="288" width="448" height="24" rx="12" fill="#512BD4"/>
-  <rect x="288" y="344" width="384" height="16" rx="8" fill="#512BD4"/>
-  <rect x="288" y="384" width="416" height="16" rx="8" fill="#512BD4"/>
-  <rect x="288" y="424" width="352" height="16" rx="8" fill="#512BD4"/>
-  
-  <!-- プラス記号（Flashnoteを表す） -->
-  <circle cx="768" cy="256" r="48" fill="#FF6B35"/>
-  <rect x="748" y="256" width="40" height="8" rx="4" fill="white"/>
-  <rect x="768" y="236" width="8" height="40" rx="4" fill="white"/>
-  
-  <!-- 追加のカード線 -->
-  <rect x="288" y="480" width="320" height="16" rx="8" fill="#512BD4"/>
-  <rect x="288" y="520" width="288" height="16" rx="8" fill="#512BD4"/>
-  <rect x="288" y="560" width="256" height="16" rx="8" fill="#512BD4"/>
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN" "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd">
+<svg width="100%" height="100%" viewBox="0 0 1024 1024" version="1.1" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" xml:space="preserve" xmlns:serif="http://www.serif.com/" style="fill-rule:evenodd;clip-rule:evenodd;stroke-linejoin:round;stroke-miterlimit:2;">
+    <g transform="matrix(1.314506,0,0,1.314506,146.78819,0)">
+        <path d="M0,0L67,0L67,24L142,24L142,0L209,0L209,24L296,24L296,0L363,0L363,24L443,24L443,0L510,0L510,24L607,24L607,779L-65,779L-65,24L0,24L0,0Z" style="fill:white;fill-rule:nonzero;"/>
+    </g>
+    <g transform="matrix(1.314506,0,0,1.314506,146.78819,0)">
+        <path d="M0,0L67,0L67,24L142,24L142,0L209,0L209,24L296,24L296,0L363,0L363,24L443,24L443,0L510,0L510,24L607,24L607,779L-65,779L-65,24L0,24L0,0ZM-34,51L-34,748L577,748L577,51L510,51L510,110L443,110L443,51L363,51L363,110L296,110L296,51L209,51L209,110L142,110L142,51L67,51L67,110L0,110L0,51L-34,51Z" style="fill-rule:nonzero;"/>
+    </g>
+    <g transform="matrix(1.314506,0,0,1.314506,209.884467,807.106547)">
+        <rect x="0" y="0" width="444" height="76" style="fill-rule:nonzero;"/>
+    </g>
+    <g transform="matrix(1.314506,0,0,1.314506,211.198973,617.817715)">
+        <rect x="0" y="0" width="444" height="76" style="fill-rule:nonzero;"/>
+    </g>
+    <g transform="matrix(1.314506,0,0,1.314506,209.884467,454.818999)">
+        <rect x="0" y="0" width="444" height="76" style="fill-rule:nonzero;"/>
+    </g>
+    <g transform="matrix(1.314506,0,0,1.314506,209.884467,290.505777)">
+        <rect x="0" y="0" width="444" height="76" style="fill-rule:nonzero;"/>
+    </g>
 </svg>

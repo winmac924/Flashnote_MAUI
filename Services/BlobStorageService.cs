@@ -1193,14 +1193,30 @@ namespace Flashnote.Services
             await EnsureInitializedAsync();
             try
             {
-                Debug.WriteLine($"共有キーによるアクセス開始: {shareKey}");
+                Debug.WriteLine($"=== AccessNoteWithShareKeyAsync 開始 ===");
+                Debug.WriteLine($"入力された共有キー: {shareKey}");
                 
                 var containerClient = _blobServiceClient.GetBlobContainerClient(CONTAINER_NAME);
                 var mappingPath = $"share_keys/{shareKey}.json";
+                
+                Debug.WriteLine($"検索対象のパス: {mappingPath}");
+                
                 var blobClient = containerClient.GetBlobClient(mappingPath);
+                
+                var exists = await blobClient.ExistsAsync();
+                Debug.WriteLine($"ファイルの存在確認結果: {exists.Value}");
 
-                if (!await blobClient.ExistsAsync())
+                if (!exists.Value)
                 {
+                    Debug.WriteLine($"共有キーファイルが見つかりません: {mappingPath}");
+                    
+                    // デバッグ: share_keys フォルダ内のファイルを列挙
+                    Debug.WriteLine("=== share_keys フォルダ内のファイル一覧 ===");
+                    await foreach (var blob in containerClient.GetBlobsAsync(prefix: "share_keys/"))
+                    {
+                        Debug.WriteLine($"  - {blob.Name}");
+                    }
+                    
                     throw new Exception("共有キーが見つかりません。");
                 }
 
@@ -1208,22 +1224,80 @@ namespace Flashnote.Services
                 using var streamReader = new StreamReader(response.Value.Content);
                 var json = await streamReader.ReadToEndAsync();
                 
-                var mapping = System.Text.Json.JsonSerializer.Deserialize<Dictionary<string, string>>(json);
-                if (!mapping.TryGetValue("userId", out var userId) ||
-                    !mapping.TryGetValue("notePath", out var notePath) ||
-                    !mapping.TryGetValue("isFolder", out var isFolderStr))
+                Debug.WriteLine($"共有キーJSON取得成功: {json}");
+                
+                // JsonDocumentを使って正しくデシリアライズ（boolean型を扱える）
+                using var doc = System.Text.Json.JsonDocument.Parse(json);
+                var root = doc.RootElement;
+                
+                // プロパティ名の両方をチェック（userId または originalUserId）
+                string userId = null;
+                if (root.TryGetProperty("userId", out var userIdProp))
                 {
+                    userId = userIdProp.GetString();
+                    Debug.WriteLine($"userId プロパティから取得: {userId}");
+                }
+                else if (root.TryGetProperty("originalUserId", out var originalUserIdProp))
+                {
+                    userId = originalUserIdProp.GetString();
+                    Debug.WriteLine($"originalUserId プロパティから取得: {userId}");
+                }
+                
+                if (!root.TryGetProperty("notePath", out var notePathProp))
+                {
+                    Debug.WriteLine("notePath プロパティが存在しません");
                     throw new Exception("無効な共有キーです。");
                 }
-
-                bool.TryParse(isFolderStr, out var isFolder);
                 
+                if (string.IsNullOrEmpty(userId))
+                {
+                    Debug.WriteLine("userId/originalUserId プロパティが不足しています");
+                    Debug.WriteLine($"JSON全体: {json}");
+                    throw new Exception("無効な共有キーです。");
+                }
+                
+                var notePath = notePathProp.GetString();
+                
+                Debug.WriteLine($"userId取得: {userId}");
+                Debug.WriteLine($"notePath取得: {notePath}");
+                
+                // isFolder は boolean として取得（文字列の場合もフォールバック）
+                bool isFolder = false;
+                if (root.TryGetProperty("isFolder", out var isFolderProp))
+                {
+                    Debug.WriteLine($"isFolder プロパティの型: {isFolderProp.ValueKind}");
+                    
+                    if (isFolderProp.ValueKind == System.Text.Json.JsonValueKind.True)
+                    {
+                        isFolder = true;
+                    }
+                    else if (isFolderProp.ValueKind == System.Text.Json.JsonValueKind.False)
+                    {
+                        isFolder = false;
+                    }
+                    else if (isFolderProp.ValueKind == System.Text.Json.JsonValueKind.String)
+                    {
+                        // フォールバック: 文字列の場合
+                        bool.TryParse(isFolderProp.GetString(), out isFolder);
+                    }
+                }
+                else
+                {
+                    Debug.WriteLine("isFolder プロパティが存在しません");
+                }
+                
+                Debug.WriteLine($"isFolder取得: {isFolder}");
                 Debug.WriteLine($"共有ノートにアクセス成功 - ユーザーID: {userId}, パス: {notePath}, フォルダ: {isFolder}");
+                Debug.WriteLine($"=== AccessNoteWithShareKeyAsync 完了 ===");
+                
                 return (userId, notePath, isFolder);
             }
             catch (Exception ex)
             {
-                Debug.WriteLine($"共有キーによるアクセスに失敗: {ex.Message}");
+                Debug.WriteLine($"=== AccessNoteWithShareKeyAsync エラー ===");
+                Debug.WriteLine($"エラーの種類: {ex.GetType().Name}");
+                Debug.WriteLine($"エラーメッセージ: {ex.Message}");
+                Debug.WriteLine($"スタックトレース: {ex.StackTrace}");
                 throw;
             }
         }

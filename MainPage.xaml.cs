@@ -1,24 +1,10 @@
-﻿using System.Collections.ObjectModel;
-using System.ComponentModel;
-using System.IO;
-using System.Reflection;
-using System.Windows.Input;
-using Microsoft.Maui.Controls;
-using Microsoft.Maui.Storage;
+﻿
 using Flashnote.Services;
 using Flashnote.ViewModels;
 using Flashnote.Models;
-using Flashnote.Views;
-using System;
-using System.Threading.Tasks;
-using System.Linq;
-using System.Collections.Generic;
-using System.Text;
 using System.Diagnostics;
 using System.IO.Compression;
-using Firebase.Auth;
-using Microsoft.Maui.Controls.PlatformConfiguration.WindowsSpecific;
-using Microsoft.Maui.Controls.Xaml;
+using System.Text.Json;
 
 namespace Flashnote
 {
@@ -1751,6 +1737,9 @@ namespace Flashnote
                 // 2. 共有キーの同期
                 await _sharedKeyService.SyncSharedKeysAsync(uid);
 
+                // 3. 共有フォルダのメタデータを取得してローカルへ反映
+                await DownloadSharedFolderMetadataAndMaterializeAsync();
+
                 await DisplayAlert("同期完了", "すべてのノートと共有キーの同期が完了しました。", "OK");
                 
                 // 同期完了後にノートリストを更新
@@ -2659,7 +2648,7 @@ namespace Flashnote
                                 var metaPath = Path.Combine(tempWork, "metadata.json");
                                 File.WriteAllText(metaPath, content);
 
-                                // Optional: include empty cards.txt so downstream can handle
+                                // 空の cards.txt を含める
                                 var cardsPath = Path.Combine(tempWork, "cards.txt");
                                 File.WriteAllText(cardsPath, "0\n");
 
@@ -2709,5 +2698,286 @@ namespace Flashnote
             }
         }
 
+        private async Task DownloadSharedFolderMetadataAndMaterializeAsync()
+        {
+            try
+            {
+                Debug.WriteLine("DownloadSharedFolderMetadataAndMaterializeAsync start");
+                
+                // 共有キー情報から共有フォルダを取得
+                var sharedNotes = _sharedKeyService?.GetSharedNotes();
+                if (sharedNotes == null || sharedNotes.Count == 0)
+                {
+                    Debug.WriteLine("No shared notes found");
+                    return;
+                }
+
+                var docsBase = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments), "Flashnote");
+                var localTempBase = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Flashnote");
+                Directory.CreateDirectory(docsBase);
+                Directory.CreateDirectory(localTempBase);
+
+                foreach (var (key, sharedInfo) in sharedNotes)
+                {
+                    try
+                    {
+                        // フォルダのみを処理
+                        if (!sharedInfo.IsFolder)
+                        {
+                            Debug.WriteLine($"Skipping non-folder shared item: {key}");
+                            continue;
+                        }
+
+                        Debug.WriteLine($"Processing shared folder: {key}, OriginalUserId: {sharedInfo.OriginalUserId}, NotePath: {sharedInfo.NotePath}");
+
+                        // フォルダIDを取得（NotePath の最後のセグメント）
+                        var parts = sharedInfo.NotePath?.Split(new[] { '/' }, StringSplitOptions.RemoveEmptyEntries);
+                        if (parts == null || parts.Length == 0)
+                        {
+                            Debug.WriteLine($"Invalid NotePath for shared folder: {sharedInfo.NotePath}");
+                            continue;
+                        }
+                        var folderId = parts[^1];
+                        Debug.WriteLine($"Shared folder ID: {folderId}");
+
+                        // 共有フォルダとその中身を再帰的に取得
+                        await DownloadSharedFolderRecursiveAsync(
+                            sharedInfo.OriginalUserId, 
+                            folderId, 
+                            docsBase, 
+                            localTempBase);
+                    }
+                    catch (Exception exEach)
+                    {
+                        Debug.WriteLine($"Error processing shared folder {key}: {exEach.Message}");
+                    }
+                }
+
+                Debug.WriteLine("DownloadSharedFolderMetadataAndMaterializeAsync completed");
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"DownloadSharedFolderMetadataAndMaterializeAsync error: {ex.Message}");
+            }
+        }
+
+        /// <summary>
+        /// 共有フォルダとその中身を再帰的にダウンロードする
+        /// </summary>
+        private async Task DownloadSharedFolderRecursiveAsync(
+            string originalUserId, 
+            string folderId, 
+            string docsBase, 
+            string localTempBase)
+        {
+            try
+            {
+                Debug.WriteLine($"DownloadSharedFolderRecursiveAsync: folderId={folderId}, uid={originalUserId}");
+
+                // 通常フォルダと同様のアクセス方法で metadata.json を取得
+                string metadataContent = null;
+                try
+                {
+                    // BlobStorageService.GetUserFileAsync を使用
+                    // uid だけが originalUserId に変わる
+                    metadataContent = await _blobStorageService.GetUserFileAsync(
+                        originalUserId,
+                        "metadata.json",
+                        folderId);
+                }
+                catch (Exception ex)
+                {
+                    Debug.WriteLine($"Failed to get metadata for folder {folderId}: {ex.Message}");
+                    return;
+                }
+
+                if (string.IsNullOrEmpty(metadataContent))
+                {
+                    Debug.WriteLine($"No metadata content for folder: {folderId}");
+                    return;
+                }
+
+                Debug.WriteLine($"Retrieved metadata for folder {folderId}, length: {metadataContent.Length}");
+
+                // メタデータをパース
+                string originalName = null;
+                List<string> childFolders = new List<string>();
+                List<string> childNotes = new List<string>();
+                
+                try
+                {
+                    using var doc = System.Text.Json.JsonDocument.Parse(metadataContent);
+                    var root = doc.RootElement;
+                    
+                    if (root.TryGetProperty("originalName", out var pOrig))
+                    {
+                        originalName = pOrig.GetString();
+                    }
+
+                    // 子フォルダのリストを取得
+                    if (root.TryGetProperty("childFolders", out var pChildFolders) && 
+                        pChildFolders.ValueKind == System.Text.Json.JsonValueKind.Array)
+                    {
+                        foreach (var item in pChildFolders.EnumerateArray())
+                        {
+                            var childId = item.GetString();
+                            if (!string.IsNullOrEmpty(childId))
+                            {
+                                childFolders.Add(childId);
+                            }
+                        }
+                        Debug.WriteLine($"Found {childFolders.Count} child folders in metadata");
+                    }
+
+                    // 子ノートのリストを取得
+                    if (root.TryGetProperty("childNotes", out var pChildNotes) && 
+                        pChildNotes.ValueKind == System.Text.Json.JsonValueKind.Array)
+                    {
+                        foreach (var item in pChildNotes.EnumerateArray())
+                        {
+                            var childId = item.GetString();
+                            if (!string.IsNullOrEmpty(childId))
+                            {
+                                childNotes.Add(childId);
+                            }
+                        }
+                        Debug.WriteLine($"Found {childNotes.Count} child notes in metadata");
+                    }
+                }
+                catch (Exception jex)
+                {
+                    Debug.WriteLine($"Failed to parse metadata for folder {folderId}: {jex.Message}");
+                }
+
+                // Documents\Flashnote\{FolderUUID}\metadata.json に保存
+                var folderDir = Path.Combine(docsBase, folderId);
+                try
+                {
+                    Directory.CreateDirectory(folderDir);
+                    var metaPath = Path.Combine(folderDir, "metadata.json");
+                    File.WriteAllText(metaPath, metadataContent);
+                    Debug.WriteLine($"Saved folder metadata to: {metaPath}");
+                }
+                catch (Exception wex)
+                {
+                    Debug.WriteLine($"Failed to write metadata for folder {folderId}: {wex.Message}");
+                }
+
+                // LocalApplicationData\Flashnote\{FolderUUID}\metadata.json にもコピー
+                try
+                {
+                    var tempMetaDir = Path.Combine(localTempBase, folderId);
+                    Directory.CreateDirectory(tempMetaDir);
+                    var tempMetaPath = Path.Combine(tempMetaDir, "metadata.json");
+                    File.WriteAllText(tempMetaPath, metadataContent);
+                    Debug.WriteLine($"Saved folder metadata to temp: {tempMetaPath}");
+                }
+                catch (Exception exMeta)
+                {
+                    Debug.WriteLine($"Failed to save temp metadata for folder {folderId}: {exMeta.Message}");
+                }
+
+                // 子フォルダを再帰的に取得
+                foreach (var childFolderId in childFolders)
+                {
+                    try
+                    {
+                        Debug.WriteLine($"Processing child folder: {childFolderId}");
+                        await DownloadSharedFolderRecursiveAsync(
+                            originalUserId, 
+                            childFolderId, 
+                            Path.Combine(docsBase, folderId), 
+                            Path.Combine(localTempBase, folderId));
+                    }
+                    catch (Exception exChild)
+                    {
+                        Debug.WriteLine($"Failed to process child folder {childFolderId}: {exChild.Message}");
+                    }
+                }
+
+                // 子ノートのメタデータを取得
+                foreach (var childNoteId in childNotes)
+                {
+                    try
+                    {
+                        Debug.WriteLine($"Processing child note: {childNoteId}");
+                        
+                        // ノートの metadata.json を取得
+                        string noteMetadata = null;
+                        try
+                        {
+                            noteMetadata = await _blobStorageService.GetUserFileAsync(
+                                originalUserId,
+                                "metadata.json",
+                                childNoteId);
+                        }
+                        catch (Exception ex)
+                        {
+                            Debug.WriteLine($"Failed to get metadata for note {childNoteId}: {ex.Message}");
+                            continue;
+                        }
+
+                        if (string.IsNullOrEmpty(noteMetadata))
+                        {
+                            Debug.WriteLine($"No metadata for note: {childNoteId}");
+                            continue;
+                        }
+
+                        // ノートの親フォルダディレクトリに .ankpls を作成
+                        var noteParentDir = Path.Combine(docsBase, folderId);
+                        Directory.CreateDirectory(noteParentDir);
+
+                        var ankplsPath = Path.Combine(noteParentDir, childNoteId + ".ankpls");
+                        try
+                        {
+                            var tempWork = Path.Combine(Path.GetTempPath(), "Flashnote_shared_note_" + Guid.NewGuid().ToString("N"));
+                            Directory.CreateDirectory(tempWork);
+                            var metaPath = Path.Combine(tempWork, "metadata.json");
+                            File.WriteAllText(metaPath, noteMetadata);
+
+                            // 空の cards.txt を含める
+                            var cardsPath = Path.Combine(tempWork, "cards.txt");
+                            File.WriteAllText(cardsPath, "0\n");
+
+                            if (File.Exists(ankplsPath))
+                            {
+                                try { File.Delete(ankplsPath); } catch { }
+                            }
+                            ZipFile.CreateFromDirectory(tempWork, ankplsPath);
+
+                            // LocalApplicationData にもコピー
+                            var localTempNoteDir = Path.Combine(localTempBase, folderId, childNoteId + "_temp");
+                            try
+                            {
+                                Directory.CreateDirectory(localTempNoteDir);
+                                File.WriteAllText(Path.Combine(localTempNoteDir, "metadata.json"), noteMetadata);
+                                File.WriteAllText(Path.Combine(localTempNoteDir, "cards.txt"), "0\n");
+                            }
+                            catch (Exception ltex)
+                            {
+                                Debug.WriteLine($"Local temp write failed for note {childNoteId}: {ltex.Message}");
+                            }
+
+                            try { Directory.Delete(tempWork, true); } catch { }
+                            Debug.WriteLine($"Created .ankpls for shared note: {ankplsPath}");
+                        }
+                        catch (Exception zex)
+                        {
+                            Debug.WriteLine($"Failed to create .ankpls for note {childNoteId}: {zex.Message}");
+                        }
+                    }
+                    catch (Exception exNote)
+                    {
+                        Debug.WriteLine($"Failed to process child note {childNoteId}: {exNote.Message}");
+                    }
+                }
+
+                Debug.WriteLine($"Completed processing folder {folderId} with {childFolders.Count} child folders and {childNotes.Count} child notes");
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"DownloadSharedFolderRecursiveAsync error for folder {folderId}: {ex.Message}");
+            }
+        }
     }
 }

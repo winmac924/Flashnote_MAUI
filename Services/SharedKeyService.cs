@@ -358,12 +358,130 @@ namespace Flashnote.Services
         {
             try
             {
-                var noteName = Path.GetFileName(sharedInfo.NotePath);
-                Debug.WriteLine($"単一ノートのインポート: {noteName}");
-
-                // CardSyncServiceを使用してノートを同期
-                var cardSyncService = new CardSyncService(_blobStorageService);
-                await cardSyncService.SyncSharedNoteAsync(sharedInfo.OriginalUserId, sharedInfo.NotePath, noteName, null);
+                Debug.WriteLine($"単一ノートのインポート: {sharedInfo.NotePath}");
+                
+                // NotePath から noteName と subFolder を抽出
+                var parts = sharedInfo.NotePath.Split('/');
+                string noteId;
+                string subFolder = null;
+                
+                if (parts.Length == 1)
+                {
+                    // ルート直下のノート（新形式の場合はUUID）
+                    noteId = parts[0];
+                }
+                else
+                {
+                    // サブフォルダ内のノート
+                    noteId = parts[parts.Length - 1];
+                    subFolder = string.Join("/", parts.Take(parts.Length - 1));
+                }
+                
+                Debug.WriteLine($"noteId: {noteId}, subFolder: {subFolder ?? "(なし)"}");
+                
+                // metadata.json を取得（新形式・旧形式両対応）
+                string metadataContent = null;
+                try
+                {
+                    // まず noteId/metadata.json として取得を試みる（新形式）
+                    metadataContent = await _blobStorageService.GetUserFileAsync(sharedInfo.OriginalUserId, "metadata.json", noteId);
+                    
+                    if (string.IsNullOrEmpty(metadataContent) && !string.IsNullOrEmpty(subFolder))
+                    {
+                        // 旧形式の場合：subFolder/noteId/metadata.json
+                        var oldPath = $"{subFolder}/{noteId}";
+                        metadataContent = await _blobStorageService.GetUserFileAsync(sharedInfo.OriginalUserId, "metadata.json", oldPath);
+                    }
+                }
+                catch (Exception ex)
+                {
+                    Debug.WriteLine($"metadata.json の取得に失敗: {ex.Message}");
+                }
+                
+                if (string.IsNullOrEmpty(metadataContent))
+                {
+                    Debug.WriteLine($"metadata.json が取得できませんでした。ノートID: {noteId}");
+                    // metadata がない場合でも、cards.txt をダウンロードして .ankpls を作成する
+                    await _blobStorageService.DownloadSharedNoteAsync(
+                        sharedInfo.OriginalUserId, 
+                        sharedInfo.NotePath, 
+                        noteId, 
+                        subFolder);
+                    Debug.WriteLine($"単一ノートのインポート完了（フォールバック）: {noteId}");
+                    return;
+                }
+                
+                // metadata.json を解析して .ankpls を作成
+                using var doc = System.Text.Json.JsonDocument.Parse(metadataContent);
+                var root = doc.RootElement;
+                var originalName = root.TryGetProperty("originalName", out var pOrig) ? pOrig.GetString() : noteId;
+                var displayName = root.TryGetProperty("displayName", out var pDisp) ? pDisp.GetString() : originalName;
+                
+                Debug.WriteLine($"metadata 解析: originalName={originalName}, displayName={displayName}");
+                
+                // ローカルの保存先パスを決定
+                var localBasePath = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments), "Flashnote");
+                var tempBasePath = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Flashnote");
+                
+                string ankplsPath;
+                string tempDir;
+                
+                if (!string.IsNullOrEmpty(subFolder))
+                {
+                    var subFolderPath = Path.Combine(localBasePath, subFolder);
+                    if (!Directory.Exists(subFolderPath))
+                    {
+                        Directory.CreateDirectory(subFolderPath);
+                    }
+                    ankplsPath = Path.Combine(subFolderPath, $"{displayName ?? noteId}.ankpls");
+                    tempDir = Path.Combine(tempBasePath, subFolder, $"{displayName ?? noteId}_temp");
+                }
+                else
+                {
+                    if (!Directory.Exists(localBasePath))
+                    {
+                        Directory.CreateDirectory(localBasePath);
+                    }
+                    ankplsPath = Path.Combine(localBasePath, $"{displayName ?? noteId}.ankpls");
+                    tempDir = Path.Combine(tempBasePath, $"{displayName ?? noteId}_temp");
+                }
+                
+                // 一時ディレクトリを作成
+                if (Directory.Exists(tempDir))
+                {
+                    try
+                    {
+                        Directory.Delete(tempDir, true);
+                    }
+                    catch (Exception ex)
+                    {
+                        Debug.WriteLine($"既存の一時ディレクトリの削除に失敗: {ex.Message}");
+                    }
+                }
+                Directory.CreateDirectory(tempDir);
+                
+                // metadata.json を一時ディレクトリに保存
+                var metadataPath = Path.Combine(tempDir, "metadata.json");
+                await File.WriteAllTextAsync(metadataPath, metadataContent);
+                Debug.WriteLine($"metadata.json を保存: {metadataPath}");
+                
+                // .ankpls を作成
+                if (File.Exists(ankplsPath))
+                {
+                    try
+                    {
+                        File.Delete(ankplsPath);
+                    }
+                    catch (Exception ex)
+                    {
+                        Debug.WriteLine($"既存の .ankpls の削除に失敗: {ex.Message}");
+                    }
+                }
+                
+                System.IO.Compression.ZipFile.CreateFromDirectory(tempDir, ankplsPath);
+                Debug.WriteLine($".ankpls を作成: {ankplsPath}");
+                
+                Debug.WriteLine($"単一ノートのインポート完了: {noteId}");
             }
             catch (Exception ex)
             {
@@ -381,9 +499,97 @@ namespace Flashnote.Services
             {
                 Debug.WriteLine($"共有フォルダのインポート: {sharedInfo.NotePath}");
 
-                // CardSyncServiceを使用してフォルダを同期
-                var cardSyncService = new CardSyncService(_blobStorageService);
-                await cardSyncService.SyncSharedFolderAsync(sharedInfo.OriginalUserId, sharedInfo.NotePath, sharedInfo.ShareKey);
+                // NotePath からフォルダIDを抽出
+                var parts = sharedInfo.NotePath?.Split(new[] { '/' }, StringSplitOptions.RemoveEmptyEntries);
+                if (parts == null || parts.Length == 0)
+                {
+                    Debug.WriteLine("ImportSharedFolderAsync: folderPath が不正です");
+                    return;
+                }
+                var folderId = parts[^1];
+                Debug.WriteLine($"フォルダID: {folderId}");
+                
+                // フォルダの metadata.json を取得
+                string metadataContent = null;
+                try
+                {
+                    // 新形式: uid/{folderId}/metadata.json
+                    metadataContent = await _blobStorageService.GetUserFileAsync(sharedInfo.OriginalUserId, "metadata.json", folderId);
+                }
+                catch (Exception ex)
+                {
+                    Debug.WriteLine($"フォルダの metadata.json 取得に失敗: {ex.Message}");
+                }
+                
+                if (string.IsNullOrEmpty(metadataContent))
+                {
+                    Debug.WriteLine($"フォルダの metadata.json が取得できませんでした。フォルダID: {folderId}");
+                    // フォールバック: 旧形式のダウンロードを試みる
+                    var (isActuallyFolder, downloadedNotes) = await _blobStorageService.DownloadSharedFolderAsync(
+                        sharedInfo.OriginalUserId, 
+                        sharedInfo.NotePath, 
+                        sharedInfo.ShareKey);
+                    
+                    if (isActuallyFolder)
+                    {
+                        Debug.WriteLine($"共有フォルダのインポート完了（フォールバック）: {downloadedNotes.Count}個のノートをダウンロード");
+                    }
+                    else
+                    {
+                        Debug.WriteLine($"共有フォルダは実際には単一ノートでした（フォールバック）");
+                    }
+                    return;
+                }
+                
+                // metadata.json を解析
+                using var doc = System.Text.Json.JsonDocument.Parse(metadataContent);
+                var root = doc.RootElement;
+                var isFolder = root.TryGetProperty("isFolder", out var pIsFolder) && pIsFolder.GetBoolean();
+                var originalName = root.TryGetProperty("originalName", out var pOrig) ? pOrig.GetString() : folderId;
+                var displayName = root.TryGetProperty("displayName", out var pDisp) ? pDisp.GetString() : originalName;
+                
+                if (!isFolder)
+                {
+                    Debug.WriteLine($"metadata によると、これはフォルダではありません。単一ノートとして処理します。");
+                    // 単一ノートとして処理
+                    await ImportSingleSharedNoteAsync(sharedInfo);
+                    return;
+                }
+                
+                Debug.WriteLine($"フォルダ metadata 解析: originalName={originalName}, displayName={displayName}, isFolder={isFolder}");
+                
+                // ローカルの保存先パスを決定
+                var localBasePath = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments), "Flashnote");
+                var tempBasePath = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Flashnote");
+                
+                // フォルダの metadata.json を保存（Documents）
+                var folderDir = Path.Combine(localBasePath, folderId);
+                if (!Directory.Exists(folderDir))
+                {
+                    Directory.CreateDirectory(folderDir);
+                }
+                var folderMetaPath = Path.Combine(folderDir, "metadata.json");
+                await File.WriteAllTextAsync(folderMetaPath, metadataContent);
+                Debug.WriteLine($"フォルダ metadata.json を保存: {folderMetaPath}");
+                
+                // LocalApplicationData にもコピー
+                try
+                {
+                    var tempMetaDir = Path.Combine(tempBasePath, folderId);
+                    if (!Directory.Exists(tempMetaDir))
+                    {
+                        Directory.CreateDirectory(tempMetaDir);
+                    }
+                    var tempMetaPath = Path.Combine(tempMetaDir, "metadata.json");
+                    await File.WriteAllTextAsync(tempMetaPath, metadataContent);
+                    Debug.WriteLine($"一時フォルダ metadata.json を保存: {tempMetaPath}");
+                }
+                catch (Exception ex)
+                {
+                    Debug.WriteLine($"一時フォルダ metadata 保存に失敗: {ex.Message}");
+                }
+                
+                Debug.WriteLine($"共有フォルダのインポート完了: {folderId}");
             }
             catch (Exception ex)
             {
@@ -438,5 +644,125 @@ namespace Flashnote.Services
                 Debug.WriteLine($"共有キーの保存に失敗: {ex.Message}");
             }
         }
+
+        /// <summary>
+        /// 共有キーを生成してサーバーにアップロードする
+        /// 返り値:生成した shareKey
+        /// </summary>
+        public async Task<string> CreateAndUploadShareKeyAsync(string noteName, string notePath, bool isFolder)
+        {
+            try
+            {
+                Debug.WriteLine($"共有キー作成開始: noteName={noteName}, notePath={notePath}, isFolder={isFolder}");
+
+                // ハイフンを含む標準形式 (D)で生成し大文字化
+                var uuid = Guid.NewGuid().ToString("D").ToUpperInvariant();
+
+                var sharedInfo = new SharedKeyInfo
+                {
+                    OriginalUserId = App.CurrentUser?.Uid ?? string.Empty,
+                    NotePath = notePath,
+                    ShareKey = uuid,
+                    IsFolder = isFolder,
+                    IsOwnedByMe = true
+                };
+
+                // マッピングJSONを作成（isFolderはboolean、sharedByUserIdを含める）
+                var mappingObj = new
+                {
+                    userId = sharedInfo.OriginalUserId,
+                    isFolder = sharedInfo.IsFolder,
+                    sharedByUserId = App.CurrentUser?.Uid ?? string.Empty,
+                    notePath = sharedInfo.NotePath
+                };
+
+                var jsonOptions = new System.Text.Json.JsonSerializerOptions { WriteIndented = true };
+                var mappingJson = System.Text.Json.JsonSerializer.Serialize(mappingObj, jsonOptions);
+
+                // サーバーにアップロード（ファイル名は {UUID}.json 大文字）
+                await _blobStorageService.UploadShareKeyMappingAsync(uuid, mappingJson);
+
+                // ローカルにも共有キーを保存
+                var displayName = Path.GetFileName(notePath);
+                // displayName が空の場合は UUID をキーに使う（ルート共有などで notePath が空になる場合に備える）
+                var localKey = !string.IsNullOrEmpty(displayName) ? displayName : uuid;
+                _sharedNotes[localKey] = sharedInfo;
+                SaveSharedKeys();
+
+                Debug.WriteLine($"共有キー作成完了: {uuid}");
+                return uuid;
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"共有キー作成中にエラー: {ex.Message}");
+                throw;
+            }
+        }
+
+        /// <summary>
+        /// 共有キー（UUID）を使って共有ノート・フォルダにアクセスする
+        /// </summary>
+        public async Task<(bool success, string message)> AccessWithShareKeyAsync(string shareKey)
+        {
+            try
+            {
+                Debug.WriteLine($"共有キーによるアクセス開始: {shareKey}");
+                
+                // UUIDの形式チェック（大文字・小文字を正規化）
+                var normalizedKey = shareKey.Trim().ToUpperInvariant();
+                if (!Guid.TryParse(normalizedKey, out _))
+                {
+                    return (false, "無効な共有キー形式です。");
+                }
+                
+                // share_keys/{UUID}.json をダウンロード
+                var (userId, notePath, isFolder) = await _blobStorageService.AccessNoteWithShareKeyAsync(normalizedKey);
+                
+                if (string.IsNullOrEmpty(userId) || string.IsNullOrEmpty(notePath))
+                {
+                    return (false, "共有キーが見つかりません。キーが正しいか確認してください。");
+                }
+                
+                Debug.WriteLine($"共有キー情報取得成功 - userId: {userId}, notePath: {notePath}, isFolder: {isFolder}");
+                
+                // 共有情報を作成
+                var sharedInfo = new SharedKeyInfo
+                {
+                    OriginalUserId = userId,
+                    NotePath = notePath,
+                    ShareKey = normalizedKey,
+                    IsFolder = isFolder,
+                    IsOwnedByMe = false // 他人から共有されたノート
+                };
+                
+                // ローカルキーを決定（notePathの最後の部分、またはUUID）
+                var displayName = Path.GetFileName(notePath);
+                var localKey = !string.IsNullOrEmpty(displayName) ? displayName : normalizedKey;
+                
+                // 既に存在する場合はスキップ
+                if (_sharedNotes.ContainsKey(localKey))
+                {
+                    Debug.WriteLine($"共有キーは既に登録されています: {localKey}");
+                    return (true, $"共有キーは既に登録されています: {localKey}");
+                }
+                
+                // 共有ノートをインポート
+                await ImportSharedNoteAsync(sharedInfo);
+                
+                // ローカルに共有キーを保存
+                _sharedNotes[localKey] = sharedInfo;
+                SaveSharedKeys();
+                
+                Debug.WriteLine($"共有キーによるアクセス完了: {localKey}");
+                
+                var itemType = isFolder ? "フォルダ" : "ノート";
+                return (true, $"共有{itemType}を正常にインポートしました: {localKey}");
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"共有キーによるアクセス中にエラー: {ex.Message}");
+                return (false, $"エラーが発生しました: {ex.Message}");
+            }
+        }
     }
-} 
+}
