@@ -27,7 +27,7 @@ jobs:
     - name: 🔧 Setup .NET
       uses: actions/setup-dotnet@v4
       with:
-        dotnet-version: '9.0.x'
+        dotnet-version: '10.0.x'
     
     - name: 🔐 Create appsettings.json from secrets
       run: |
@@ -63,17 +63,20 @@ jobs:
         }
         echo "Building version: $version"
       shell: powershell
+
+    - name: 🛠️ Install Workloads
+      run: dotnet workload restore ${{ env.PROJECT_PATH }}
       
     - name: 🛠️ Restore Dependencies
       run: dotnet restore ${{ env.PROJECT_PATH }}
       
     - name: 🏗️ Build Application
       run: |
-        dotnet build ${{ env.PROJECT_PATH }} -c Release -f net9.0-windows10.0.19041.0 --no-restore
+        dotnet build ${{ env.PROJECT_PATH }} -c Release -f net10.0-windows10.0.19041.0 --no-restore
         
     - name: 📦 Publish Executable
       run: |
-        dotnet publish ${{ env.PROJECT_PATH }} -c Release -f net9.0-windows10.0.19041.0 -r win-x64 --self-contained true -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -p:ApplicationDisplayVersion=${{ steps.get_version.outputs.VERSION }}
+        dotnet publish ${{ env.PROJECT_PATH }} -c Release -f net10.0-windows10.0.19041.0 -r win-x64 --self-contained true -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -p:ApplicationDisplayVersion=${{ steps.get_version.outputs.VERSION }}
         
     - name: 🔍 Debug List Files
       run: |
@@ -87,10 +90,10 @@ jobs:
       run: |
         # 複数のパスパターンを試す
         $searchPaths = @(
-          "bin/Release/net9.0-windows10.0.19041.0/win-x64/publish/",
-          "bin\Release\net9.0-windows10.0.19041.0\win-x64\publish\",
-          "bin/Release/net9.0-windows10.0.19041.0/win-x64/",
-          "bin\Release\net9.0-windows10.0.19041.0\win-x64\"
+          "bin/Release/net10.0-windows10.0.19041.0/win-x64/publish/",
+          "bin\Release\net10.0-windows10.0.19041.0\win-x64\publish\",
+          "bin/Release/net10.0-windows10.0.19041.0/win-x64/",
+          "bin\Release\net10.0-windows10.0.19041.0\win-x64\"
         )
         
         $exeFound = $false
@@ -169,4 +172,4 @@ jobs:
         echo "- **タグ**: ${{ steps.get_version.outputs.TAG_NAME }}" >> $GITHUB_STEP_SUMMARY
         echo "- **実行ファイル**: ${{ steps.find_exe.outputs.EXE_NAME }}" >> $GITHUB_STEP_SUMMARY
         echo "- **ファイルサイズ**: ${{ steps.find_exe.outputs.EXE_SIZE }}" >> $GITHUB_STEP_SUMMARY
-        echo "- **リリースURL**: ${{ github.server_url }}/${{ github.repository }}/releases/tag/${{ steps.get_version.outputs.TAG_NAME }}" >> $GITHUB_STEP_SUMMARY 
+        echo "- **リリースURL**: ${{ github.server_url }}/${{ github.repository }}/releases/tag/${{ steps.get_version.outputs.TAG_NAME }}" >> $GITHUB_STEP_SUMMARY

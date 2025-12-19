@@ -352,69 +352,61 @@ public class GitHubUpdateService
             // バックアップファイル名
             var backupPath = currentExePath + ".backup";
             
-            // アップデート用バッチファイルを作成（英語メッセージでエンコーディング問題を回避）
-            var batchPath = Path.Combine(Path.GetTempPath(), "Flashnote_Update.bat");
-            var batchContent = $@"@echo off
-chcp 65001 >nul
-title Flashnote Update
-echo.
-echo   Flashnote Update in Progress...
-echo.
+            // アップデート用PowerShellスクリプトを作成（日本語パス対応のためPowerShellを使用）
+            var scriptPath = Path.Combine(Path.GetTempPath(), "Flashnote_Update.ps1");
+            
+            // パスをエスケープ（シングルクォートを2つに置換）
+            var psCurrentExe = currentExePath.Replace("'", "''");
+            var psBackup = backupPath.Replace("'", "''");
+            var psNewExe = exePath.Replace("'", "''");
 
-REM Wait for application to completely exit
-echo Waiting for application to exit...
-timeout /t 2 /nobreak >nul
+            var scriptContent = $@"
+$currentExe = '{psCurrentExe}'
+$backup = '{psBackup}'
+$newExe = '{psNewExe}'
 
-REM Backup current file
-if exist ""{currentExePath}"" (
-    echo Backing up current version...
-    move ""{currentExePath}"" ""{backupPath}""
-    if errorlevel 1 (
-        echo ERROR: Failed to backup current file
-        pause
-        exit /b 1
-    )
-)
+Write-Host 'Flashnote Update in Progress...' -ForegroundColor Cyan
+Write-Host ''
 
-REM Deploy new file
-echo Deploying new version...
-move ""{exePath}"" ""{currentExePath}""
-if errorlevel 1 (
-    echo ERROR: Failed to deploy new file
-    echo Restoring backup file...
-    move ""{backupPath}"" ""{currentExePath}""
-    pause
-    exit /b 1
-)
+# Wait for application to completely exit
+Write-Host 'Waiting for application to exit...'
+Start-Sleep -Seconds 2
 
-echo Update completed! Starting new version...
-timeout /t 1 /nobreak >nul
+# Backup current file
+if (Test-Path -LiteralPath $currentExe) {{
+    Write-Host 'Backing up current version...'
+    Move-Item -LiteralPath $currentExe -Destination $backup -Force
+}}
 
-REM Start new version
-start """" ""{currentExePath}""
+# Deploy new file
+Write-Host 'Deploying new version...'
+Move-Item -LiteralPath $newExe -Destination $currentExe -Force
 
-REM Delete batch file itself
-del ""%~f0""
+Write-Host 'Update completed! Starting new version...' -ForegroundColor Green
+Start-Sleep -Seconds 1
+
+# Start new version
+Start-Process -FilePath $currentExe
 ";
 
-            await File.WriteAllTextAsync(batchPath, batchContent, new System.Text.UTF8Encoding(false));
-            _logger.LogInformation("アップデートバッチファイルを作成: {BatchPath}", batchPath);
+            await File.WriteAllTextAsync(scriptPath, scriptContent, System.Text.Encoding.UTF8);
+            _logger.LogInformation("アップデートスクリプトを作成: {ScriptPath}", scriptPath);
 
-            // バッチファイルを実行
+            // PowerShellを実行
             var startInfo = new System.Diagnostics.ProcessStartInfo
             {
-                FileName = batchPath,
+                FileName = "powershell.exe",
+                Arguments = $"-ExecutionPolicy Bypass -File \"{scriptPath}\"",
                 UseShellExecute = true,
-                WindowStyle = System.Diagnostics.ProcessWindowStyle.Normal, // ユーザーに進行状況を表示
-                CreateNoWindow = false
+                WindowStyle = System.Diagnostics.ProcessWindowStyle.Normal
             };
             
-            _logger.LogInformation("アップデート用バッチファイルを実行します");
+            _logger.LogInformation("アップデートスクリプトを実行します");
             
             var process = System.Diagnostics.Process.Start(startInfo);
             if (process == null)
             {
-                _logger.LogError("バッチファイルの実行に失敗しました");
+                _logger.LogError("スクリプトの実行に失敗しました");
                 return false;
             }
             
