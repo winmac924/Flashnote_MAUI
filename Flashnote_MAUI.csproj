@@ -27,12 +27,12 @@
 		<ApplicationId>winmac924.flashnote.maui</ApplicationId>
 
 		<!-- Versions - 自動アップデート対応 -->
-		<ApplicationDisplayVersion>2.4.0</ApplicationDisplayVersion>
-		<ApplicationVersion>240</ApplicationVersion>
-		<VersionPrefix>2.4.0</VersionPrefix>
+		<ApplicationDisplayVersion>2.5.0</ApplicationDisplayVersion>
+		<ApplicationVersion>250</ApplicationVersion>
+		<VersionPrefix>2.5.0</VersionPrefix>
 		<VersionSuffix Condition="'$(Configuration)' == 'Debug'">dev</VersionSuffix>
-		<AssemblyVersion>2.4.0.0</AssemblyVersion>
-		<FileVersion>2.4.0.0</FileVersion>
+		<AssemblyVersion>2.5.0.0</AssemblyVersion>
+		<FileVersion>2.5.0.0</FileVersion>
 
 		<!-- Windows配布設定 - EXE形式 -->
 		<WindowsPackageType>None</WindowsPackageType>
