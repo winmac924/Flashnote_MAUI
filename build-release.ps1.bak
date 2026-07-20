@@ -1,4 +1,4 @@
-﻿# Flashnote MAUI - Windows リリースビルドスクリプト (GitHub対応)
+# Flashnote MAUI - Windows リリースビルドスクリプト (GitHub対応)
 
 param(
     [string]$Version = "1.1.0",

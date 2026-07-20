@@ -1,4 +1,4 @@
-<Project Sdk="Microsoft.NET.Sdk">
+﻿<Project Sdk="Microsoft.NET.Sdk">
 
 	<PropertyGroup>
 		<TargetFrameworks Condition="$([MSBuild]::IsOSPlatform('windows'))">net10.0-windows10.0.19041.0</TargetFrameworks>
@@ -26,7 +26,7 @@
 		<!-- App Identifier -->
 		<ApplicationId>winmac924.flashnote.maui</ApplicationId>
 
-		<!-- Versions - 自動アップデート対応 -->
+		<!-- Versions - 閾ｪ蜍輔い繝・・繝・・繝亥ｯｾ蠢・-->
 		<ApplicationDisplayVersion>3.0.0</ApplicationDisplayVersion>
 		<ApplicationVersion>300</ApplicationVersion>
 		<VersionPrefix>3.0.0</VersionPrefix>
@@ -34,7 +34,7 @@
 		<AssemblyVersion>3.0.0.0</AssemblyVersion>
 		<FileVersion>3.0.0.0</FileVersion>
 
-		<!-- Windows配布設定 - EXE形式 -->
+		<!-- Windows驟榊ｸ・ｨｭ螳・- EXE蠖｢蠑・-->
 		<WindowsPackageType>None</WindowsPackageType>
 		<WindowsAppSDKSelfContained>true</WindowsAppSDKSelfContained>
 		<PublishSingleFile>true</PublishSingleFile>
@@ -43,10 +43,10 @@
 		<IncludeNativeLibrariesForSelfExtract>true</IncludeNativeLibrariesForSelfExtract>
 		<PublishTrimmed>false</PublishTrimmed>
 
-		<!-- WebView2設定 -->
+		<!-- WebView2險ｭ螳・-->
 		<WebView2UserDataFolder Condition="$([MSBuild]::IsOSPlatform('windows'))">%LOCALAPPDATA%\Flashnote\WebView2</WebView2UserDataFolder>
 
-		<!-- MSIX設定 -->
+		<!-- MSIX險ｭ螳・-->
 		<PackageCertificateKeyFile Condition="$([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) == 'windows'">Package_TemporaryKey.pfx</PackageCertificateKeyFile>
 		<PackageCertificatePassword Condition="$([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) == 'windows'">password</PackageCertificatePassword>
 		<GenerateAppInstallerFile>false</GenerateAppInstallerFile>
@@ -61,7 +61,7 @@
 	</PropertyGroup>
 
 	<ItemGroup>
-		<!-- テストプロジェクト(Flashnote_MAUI.Tests)配下は本体ビルドの暗黙コンパイル対象から除外 -->
+		<!-- 繝・せ繝医・繝ｭ繧ｸ繧ｧ繧ｯ繝・Flashnote_MAUI.Tests)驟堺ｸ九・譛ｬ菴薙ン繝ｫ繝峨・證鈴ｻ吶さ繝ｳ繝代う繝ｫ蟇ｾ雎｡縺九ｉ髯､螟・-->
 		<Compile Remove="Flashnote_MAUI.Tests\**" />
 		<EmbeddedResource Remove="Flashnote_MAUI.Tests\**" />
 		<MauiXaml Remove="Flashnote_MAUI.Tests\**" />
@@ -85,7 +85,7 @@
 		<!-- Raw Assets (also remove the "Resources\Raw" prefix) -->
 		<MauiAsset Include="Resources\Raw\**" LogicalName="%(RecursiveDir)%(Filename)%(Extension)" />
 		<None Remove="Services\BlobStorageService.cs.bak" />
-		<None Remove="Services\CardManager - コピー.bak" />
+		<None Remove="Services\CardManager - 繧ｳ繝斐・.bak" />
 		<None Remove="Services\SharedKeyService.cs.bak" />
 		
 		<!-- Configuration Files -->
@@ -132,5 +132,6 @@
 	  </MauiXaml>
 	</ItemGroup>
 </Project>
+
 
 
