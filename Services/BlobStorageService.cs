@@ -6,472 +6,57 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Net.NetworkInformation;
 using CommunityToolkit.Maui.Alerts;
+using Flashnote.Services.Sync;
 
 namespace Flashnote.Services
 {
+    /// <summary>
+    /// ノート/カード/共有フォルダ等のドメインレベル操作を提供する薄いファサード。
+    /// 接続の初期化・疎通確認・ネットワーク復帰時の自動同期は BlobStorageClient に委譲する。
+    /// </summary>
     public class BlobStorageService
     {
-        private readonly BlobServiceClient _blobServiceClient;
-        private NetworkStateService _networkStateService;
-        private CardSyncService _cardSyncService;
-        private SharedKeyService _sharedKeyService;
-        private const string CONTAINER_NAME = "flashnote";
-        
+        private readonly BlobStorageClient _blobClient = new BlobStorageClient();
+
+        // 既存の呼び出し箇所（ドメインメソッド群）を変更せずに済むよう、
+        // 旧プライベートメンバー名のまま BlobStorageClient に委譲するラッパーを用意する。
+        private BlobServiceClient _blobServiceClient => _blobClient.Client;
+        private const string CONTAINER_NAME = BlobStorageClient.ContainerName;
+
         /// <summary>
         /// 自動同期完了イベント
         /// </summary>
         public event EventHandler AutoSyncCompleted;
-        private bool _isInitialized = false;
-        private readonly object _lock = new object();
-        private static readonly string FolderPath = Path.Combine(
-            Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments), "Flashnote");
+        private static readonly string FolderPath = SyncPathResolver.GetLocalNoteRoot();
 
         public BlobStorageService()
         {
-            _blobServiceClient = App.BlobServiceClient;
-            
-            // 初期化時にサービスを取得せず、必要時に遅延取得する
-            Debug.WriteLine("BlobStorageService を初期化しました（サービスは遅延取得）");
-        }
-        
-        /// <summary>
-        /// 依存サービスを遅延取得
-        /// </summary>
-        private void EnsureServicesInitialized()
-        {
-            if (_networkStateService == null && MauiProgram.Services != null)
-            {
-                try
-                {
-                    _networkStateService = MauiProgram.Services.GetService<NetworkStateService>();
-                    _cardSyncService = MauiProgram.Services.GetService<CardSyncService>();
-                    _sharedKeyService = MauiProgram.Services.GetService<SharedKeyService>();
-                    
-                    if (_networkStateService != null)
-                    {
-                        _networkStateService.NetworkStateChanged += OnNetworkStateChanged;
-                        Debug.WriteLine("BlobStorageService でネットワーク状態監視を開始");
-                    }
-                }
-                catch (Exception ex)
-                {
-                    Debug.WriteLine($"サービス取得エラー: {ex.Message}");
-                }
-            }
-        }
-
-        /// <summary>
-        /// ネットワーク状態変化時の処理
-        /// </summary>
-        private void OnNetworkStateChanged(object sender, NetworkStateChangedEventArgs e)
-        {
-            try
-            {
-                if (!e.IsAvailable && e.WasAvailable)
-                {
-                    // オンライン → オフライン
-                    Debug.WriteLine("ネットワークがオフラインになりました。進行中の操作をキャンセルし、Azure接続をリセットします。");
-                    
-                    // 進行中の操作をキャンセル（安全に）
-                    try
-                    {
-                        _networkStateService?.CancelPendingOperations();
-                    }
-                    catch (Exception cancelEx)
-                    {
-                        Debug.WriteLine($"操作キャンセルエラー: {cancelEx.Message}");
-                    }
-                    
-                    // Azure接続状態をリセット
-                    lock (_lock)
-                    {
-                        _isInitialized = false;
-                    }
-                    Debug.WriteLine("Azure接続状態をリセットしました（オフライン）");
-                    
-                    // ログイン状態を検証
-                    _ = Task.Run(async () =>
-                    {
-                        try
-                        {
-                            await App.ValidateLoginStatusAsync();
-                        }
-                        catch (Exception validateEx)
-                        {
-                            Debug.WriteLine($"ログイン状態検証エラー: {validateEx.Message}");
-                        }
-                    });
-                }
-                else if (e.IsAvailable && !e.WasAvailable)
-                {
-                    // オフライン → オンライン
-                    Debug.WriteLine("ネットワークがオンラインになりました。Azure接続を再初期化します。");
-                    
-                    // Azure接続を再初期化
-                    lock (_lock)
-                    {
-                        _isInitialized = false;
-                    }
-                    
-                    // 自動同期を実行（エラーハンドリング付き）
-                    _ = Task.Run(async () => 
-                    {
-                        try
-                        {
-                            await PerformAutoSyncOnNetworkRecovery();
-                        }
-                        catch (Exception autoSyncEx)
-                        {
-                            Debug.WriteLine($"自動同期エラー: {autoSyncEx.Message}");
-                        }
-                    });
-                }
-            }
-            catch (Exception ex)
-            {
-                Debug.WriteLine($"ネットワーク状態変化処理エラー: {ex.Message}");
-            }
+            _blobClient.AutoSyncCompleted += (sender, e) => AutoSyncCompleted?.Invoke(this, e);
         }
 
         /// <summary>
         /// ネットワーク接続状態をチェック
         /// </summary>
-        private bool IsNetworkAvailable()
-        {
-            try
-            {
-                // NetworkStateServiceが利用可能な場合はそれを使用
-                if (_networkStateService != null)
-                {
-                    return _networkStateService.IsNetworkAvailable;
-                }
-                
-                // フォールバックとして直接チェック
-                return NetworkInterface.GetIsNetworkAvailable();
-            }
-            catch
-            {
-                return false;
-            }
-        }
+        private bool IsNetworkAvailable() => _blobClient.IsNetworkAvailable();
 
         /// <summary>
         /// Azure接続状態をリセット（ネットワーク状態変化時など）
         /// </summary>
-        public void ResetConnectionState()
-        {
-            lock (_lock)
-            {
-                _isInitialized = false;
-            }
-            Debug.WriteLine("BlobStorageService: Azure接続状態をリセットしました");
-        }
+        public void ResetConnectionState() => _blobClient.ResetConnectionState();
 
         /// <summary>
         /// 現在の初期化状態を取得
         /// </summary>
-        public bool IsInitialized
-        {
-            get
-            {
-                lock (_lock)
-                {
-                    return _isInitialized;
-                }
-            }
-        }
-
-        /// <summary>
-        /// ネットワーク復帰時の自動同期処理
-        /// </summary>
-        private async Task PerformAutoSyncOnNetworkRecovery()
-        {
-            try
-            {
-                Debug.WriteLine("ネットワーク復帰時の自動同期処理を開始");
-                
-                // 依存サービスを初期化
-                EnsureServicesInitialized();
-                
-                // 接続安定化待機
-                await Task.Delay(3000);
-                
-                // ログインチェック
-                if (App.CurrentUser == null)
-                {
-                    Debug.WriteLine("ユーザーがログインしていないため、自動同期をスキップします");
-                    return;
-                }
-
-                var uid = App.CurrentUser.Uid;
-                Debug.WriteLine($"自動同期開始 - UID: {uid}");
-
-                // Azure接続を再テスト
-                try
-                {
-                    if (await TestBlobConnectionAsync())
-                    {
-                        Debug.WriteLine("ネットワーク復帰後のAzure接続テスト成功");
-                        lock (_lock)
-                        {
-                            _isInitialized = true;
-                        }
-                    }
-                    else
-                    {
-                        Debug.WriteLine("ネットワーク復帰後のAzure接続テスト失敗");
-                        return;
-                    }
-                }
-                catch (Exception azureEx)
-                {
-                    Debug.WriteLine($"ネットワーク復帰後のAzure接続テストエラー: {azureEx.Message}");
-                    return;
-                }
-
-                // 自動同期を実行
-                try
-                {
-                    Debug.WriteLine("自動同期: ノート同期を開始");
-                    
-                    // 1. 通常のノート同期
-                    if (_cardSyncService != null)
-                    {
-                        await _cardSyncService.SyncAllNotesAsync(uid);
-                        Debug.WriteLine("自動同期: ノート同期完了");
-                    }
-                    else
-                    {
-                        Debug.WriteLine("自動同期: CardSyncServiceが利用できません");
-                    }
-                    
-                    // 2. 共有キーの同期
-                    if (_sharedKeyService != null)
-                    {
-                        await _sharedKeyService.SyncSharedKeysAsync(uid);
-                        Debug.WriteLine("自動同期: 共有キー同期完了");
-                    }
-                    else
-                    {
-                        Debug.WriteLine("自動同期: SharedKeyServiceが利用できません");
-                    }
-
-                    Debug.WriteLine("ネットワーク復帰時の自動同期処理が完了しました");
-                    
-                    // 自動同期完了を通知（UI更新のため）
-                    MainThread.BeginInvokeOnMainThread(() =>
-                    {
-                        try
-                        {
-                            // トースト通知で自動同期完了を表示
-                            var toast = Toast.Make("ネットワーク復帰により自動同期が完了しました", CommunityToolkit.Maui.Core.ToastDuration.Short);
-                            toast?.Show();
-                            
-                            // イベントを発火
-                            AutoSyncCompleted?.Invoke(this, EventArgs.Empty);
-                        }
-                        catch (Exception toastEx)
-                        {
-                            Debug.WriteLine($"トースト通知エラー: {toastEx.Message}");
-                        }
-                    });
-                }
-                catch (Exception syncEx)
-                {
-                    Debug.WriteLine($"自動同期処理エラー: {syncEx.Message}");
-                    
-                    // エラー通知
-                    MainThread.BeginInvokeOnMainThread(() =>
-                    {
-                        try
-                        {
-                            var toast = Toast.Make("自動同期中にエラーが発生しました", CommunityToolkit.Maui.Core.ToastDuration.Short);
-                            toast?.Show();
-                        }
-                        catch (Exception toastEx)
-                        {
-                            Debug.WriteLine($"エラートースト通知エラー: {toastEx.Message}");
-                        }
-                    });
-                }
-            }
-            catch (Exception ex)
-            {
-                Debug.WriteLine($"ネットワーク復帰時処理エラー: {ex.Message}");
-            }
-        }
+        public bool IsInitialized => _blobClient.IsInitialized;
 
         /// <summary>
         /// Azure Blob Storageへの接続をテスト
         /// </summary>
-        private async Task<bool> TestBlobConnectionAsync()
-        {
-            CancellationTokenSource cancellationTokenSource = null;
-            try
-            {
-                if (!IsNetworkAvailable())
-                {
-                    Debug.WriteLine("TestBlobConnectionAsync: ネットワーク接続がありません");
-                    return false;
-                }
+        private Task<bool> TestBlobConnectionAsync() => _blobClient.TestBlobConnectionAsync();
 
-                if (_blobServiceClient == null)
-                {
-                    Debug.WriteLine("TestBlobConnectionAsync: BlobServiceClientがnullです");
-                    return false;
-                }
+        private Task EnsureInitializedAsync() => _blobClient.EnsureInitializedAsync();
 
-                Debug.WriteLine($"TestBlobConnectionAsync: コンテナ'{CONTAINER_NAME}'への接続テスト開始");
-                var containerClient = _blobServiceClient.GetBlobContainerClient(CONTAINER_NAME);
-                cancellationTokenSource = NetworkOperationCancellationManager.CreateCancellationTokenSource(TimeSpan.FromSeconds(10));
-                
-                var exists = await containerClient.ExistsAsync(cancellationTokenSource.Token);
-                Debug.WriteLine($"TestBlobConnectionAsync: コンテナ存在確認結果: {exists.Value}");
-                Debug.WriteLine("TestBlobConnectionAsync: 接続テスト成功");
-                return true;
-            }
-            catch (Azure.RequestFailedException azureEx)
-            {
-                Debug.WriteLine($"TestBlobConnectionAsync: Azure要求エラー - ステータス: {azureEx.Status}, エラーコード: {azureEx.ErrorCode}, メッセージ: {azureEx.Message}");
-                return false;
-            }
-            catch (System.Net.Http.HttpRequestException httpEx)
-            {
-                Debug.WriteLine($"TestBlobConnectionAsync: HTTP要求エラー: {httpEx.Message}");
-                return false;
-            }
-            catch (OperationCanceledException)
-            {
-                Debug.WriteLine("TestBlobConnectionAsync: 接続テストがタイムアウトしました");
-                return false;
-            }
-            catch (ObjectDisposedException)
-            {
-                Debug.WriteLine("TestBlobConnectionAsync: CancellationTokenSourceが既に破棄されています");
-                return false;
-            }
-            catch (Exception ex)
-            {
-                Debug.WriteLine($"TestBlobConnectionAsync: 予期しないエラー - タイプ: {ex.GetType().Name}, メッセージ: {ex.Message}");
-                Debug.WriteLine($"TestBlobConnectionAsync: スタックトレース: {ex.StackTrace}");
-                return false;
-            }
-            finally
-            {
-                if (cancellationTokenSource != null)
-                {
-                    try
-                    {
-                        NetworkOperationCancellationManager.RemoveCancellationTokenSource(cancellationTokenSource);
-                        cancellationTokenSource.Dispose();
-                    }
-                    catch (Exception disposeEx)
-                    {
-                        Debug.WriteLine($"TestBlobConnectionAsync: CancellationTokenSource破棄エラー: {disposeEx.Message}");
-                    }
-                }
-            }
-        }
-
-        private async Task EnsureInitializedAsync()
-        {
-            lock (_lock)
-            {
-                if (_isInitialized)
-                {
-                    return; // 既に初期化済み
-                }
-            }
-            
-            // 早期ネットワークチェック
-            if (!IsNetworkAvailable())
-            {
-                Debug.WriteLine("EnsureInitializedAsync: ネットワーク接続がありません");
-                throw new InvalidOperationException("オフラインのため、サーバーに接続できません。インターネット接続を確認してください。");
-            }
-            
-            // BlobServiceClientの状態をチェック
-            if (_blobServiceClient == null)
-            {
-                Debug.WriteLine("EnsureInitializedAsync: BlobServiceClientがnullです");
-                throw new InvalidOperationException("Azure Blob Storage接続が初期化されていません。");
-            }
-            
-            Debug.WriteLine($"EnsureInitializedAsync: BlobServiceClient準備完了、接続テスト開始");
-            
-            if (!await TestBlobConnectionAsync())
-            {
-                Debug.WriteLine("EnsureInitializedAsync: Azure Blob Storage接続テストに失敗");
-                throw new InvalidOperationException("オフラインのため、サーバーに接続できません。インターネット接続を確認してください。");
-            }
-                
-                Debug.WriteLine("EnsureInitializedAsync: Azure Blob Storage接続テスト成功、コンテナ初期化開始");
-                await InitializeContainerAsync();
-                
-                lock (_lock)
-                {
-                    _isInitialized = true;
-                }
-                Debug.WriteLine("EnsureInitializedAsync: 初期化完了");
-        }
-
-        private async Task InitializeContainerAsync()
-        {
-            try
-            {
-                var containerClient = _blobServiceClient.GetBlobContainerClient(CONTAINER_NAME);
-                
-                var cancellationTokenSource = NetworkOperationCancellationManager.CreateCancellationTokenSource(TimeSpan.FromSeconds(10));
-                try
-                {
-                    if (!await containerClient.ExistsAsync(cancellationTokenSource.Token))
-                    {
-                        Debug.WriteLine($"コンテナ '{CONTAINER_NAME}' が存在しないため、作成します。");
-                        await containerClient.CreateAsync(cancellationToken: cancellationTokenSource.Token);
-                        Debug.WriteLine($"コンテナ '{CONTAINER_NAME}' を作成しました。");
-                    }
-                    else
-                    {
-                        Debug.WriteLine($"コンテナ '{CONTAINER_NAME}' は既に存在します。");
-                    }
-                }
-                finally
-                {
-                    NetworkOperationCancellationManager.RemoveCancellationTokenSource(cancellationTokenSource);
-                    cancellationTokenSource.Dispose();
-                }
-
-                // 新しいCancellationTokenSourceでコンテナ一覧を取得
-                Debug.WriteLine("利用可能なコンテナ一覧:");
-                var listCancellationTokenSource = NetworkOperationCancellationManager.CreateCancellationTokenSource(TimeSpan.FromSeconds(10));
-                try
-                {
-                    await foreach (var container in _blobServiceClient.GetBlobContainersAsync().WithCancellation(listCancellationTokenSource.Token))
-                    {
-                        Debug.WriteLine($"- {container.Name}");
-                    }
-                }
-                finally
-                {
-                    NetworkOperationCancellationManager.RemoveCancellationTokenSource(listCancellationTokenSource);
-                    listCancellationTokenSource.Dispose();
-                }
-            }
-            catch (OperationCanceledException)
-            {
-                throw new TimeoutException("Azure Blob Storageへの接続がタイムアウトしました。ネットワーク接続を確認してください。");
-            }
-            catch (Exception ex)
-            {
-                Debug.WriteLine($"コンテナの初期化中にエラー: {ex.Message}");
-                throw new InvalidOperationException($"Azure Blob Storageの初期化に失敗しました: {ex.Message}", ex);
-            }
-        }
-
-        private string GetUserPath(string uid, string subFolder = null)
-        {
-            return subFolder != null ? $"{uid}/{subFolder}" : uid;
-        }
+        private string GetUserPath(string uid, string subFolder = null) => _blobClient.GetUserPath(uid, subFolder);
 
         public (string subFolder, string noteName, bool isCard) ParseBlobPath(string blobPath)
         {
@@ -520,7 +105,7 @@ namespace Flashnote.Services
                 // cards.txtファイルのみを対象とした効率的な検索
                 // Azure Blob Storageのプレフィックス検索を使用し、cards.txtパターンに一致するもののみを処理
                 // 注：Azure Blob Storage .NET SDKでは suffix 検索は未対応のため、早期フィルタリングで最適化
-                await foreach (var blob in containerClient.GetBlobsAsync(prefix: userPath))
+                await foreach (var blob in containerClient.GetBlobsAsync(BlobTraits.None, BlobStates.None, prefix: userPath, cancellationToken: default))
                 {
                     // cards.txtで終わらないファイルは早期にスキップ（効率化）
                     if (!blob.Name.EndsWith("/cards.txt"))
@@ -837,7 +422,7 @@ namespace Flashnote.Services
                 var folders = new HashSet<string>();
 
                 // cards.txtファイルのみを対象とした効率的な検索
-                await foreach (var blob in containerClient.GetBlobsAsync(prefix: $"{uid}/"))
+                await foreach (var blob in containerClient.GetBlobsAsync(BlobTraits.None, BlobStates.None, prefix: $"{uid}/", cancellationToken: default))
                 {
                     // cards.txtで終わらないファイルは早期にスキップ（効率化）
                     if (!blob.Name.EndsWith("/cards.txt"))
@@ -1127,7 +712,7 @@ namespace Flashnote.Services
                 try
                 {
                     // prepare target .ankpls path
-                    var localBasePath = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments), "Flashnote");
+                    var localBasePath = SyncPathResolver.GetLocalNoteRoot();
                     string ankplsPath;
                     if (!string.IsNullOrEmpty(subFolder))
                     {
@@ -1212,7 +797,7 @@ namespace Flashnote.Services
                     
                     // デバッグ: share_keys フォルダ内のファイルを列挙
                     Debug.WriteLine("=== share_keys フォルダ内のファイル一覧 ===");
-                    await foreach (var blob in containerClient.GetBlobsAsync(prefix: "share_keys/"))
+                    await foreach (var blob in containerClient.GetBlobsAsync(BlobTraits.None, BlobStates.None, prefix: "share_keys/", cancellationToken: default))
                     {
                         Debug.WriteLine($"  - {blob.Name}");
                     }
@@ -1353,7 +938,7 @@ namespace Flashnote.Services
 
                 Debug.WriteLine($"検索プレフィックス: {prefix}");
                 
-                await foreach (var blob in containerClient.GetBlobsAsync(prefix: prefix))
+                await foreach (var blob in containerClient.GetBlobsAsync(BlobTraits.None, BlobStates.None, prefix: prefix, cancellationToken: default))
                 {
                     // プレフィックス以降のファイル名のみを抽出
                     var relativePath = blob.Name.Substring(prefix.Length);
@@ -1560,7 +1145,7 @@ namespace Flashnote.Services
 
                 // .ankplsファイルを作成
                 Debug.WriteLine($".ankplsファイル作成開始");
-                var localBasePath = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments), "Flashnote");
+                var localBasePath = SyncPathResolver.GetLocalNoteRoot();
                 string ankplsPath;
                 if (!string.IsNullOrEmpty(subFolder))
                 {
@@ -1673,7 +1258,7 @@ namespace Flashnote.Services
                     Debug.WriteLine($"フォルダ内容を検索: {folderPrefix}");
 
                     // フォルダ内のcards.txtファイルのみを効率的に検索
-                    await foreach (var blob in containerClient.GetBlobsAsync(prefix: folderPrefix))
+                    await foreach (var blob in containerClient.GetBlobsAsync(BlobTraits.None, BlobStates.None, prefix: folderPrefix, cancellationToken: default))
                     {
                         // cards.txtで終わらないファイルは早期にスキップ（効率化）
                         if (!blob.Name.EndsWith("/cards.txt"))
@@ -1961,7 +1546,7 @@ namespace Flashnote.Services
 
                 Debug.WriteLine($"検索プレフィックス: {prefix}");
                 
-                await foreach (var blob in containerClient.GetBlobsAsync(prefix: prefix))
+                await foreach (var blob in containerClient.GetBlobsAsync(BlobTraits.None, BlobStates.None, prefix: prefix, cancellationToken: default))
                 {
                     Debug.WriteLine($"見つかったファイル: {blob.Name}");
                     
@@ -2323,7 +1908,7 @@ namespace Flashnote.Services
             {
                 var containerClient = _blobServiceClient.GetBlobContainerClient(CONTAINER_NAME);
                 var prefix = $"{uid}/";
-                await foreach (var blobItem in containerClient.GetBlobsAsync(prefix: prefix))
+                await foreach (var blobItem in containerClient.GetBlobsAsync(BlobTraits.None, BlobStates.None, prefix: prefix, cancellationToken: default))
                 {
                     if (!blobItem.Name.EndsWith("/metadata.json", StringComparison.OrdinalIgnoreCase))
                         continue;

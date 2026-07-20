@@ -3,6 +3,7 @@ using System.Text.Json.Serialization;
 using System.Diagnostics;
 using System.Threading.Tasks;
 using System.Linq;
+using Flashnote.Services.Sync;
 
 namespace Flashnote.Services
 {
@@ -211,6 +212,7 @@ namespace Flashnote.Services
             try
             {
                 Debug.WriteLine($"共有キーの同期開始 - UID: {uid}");
+                SyncLogger.Info("SharedKeys", $"共有キーの同期開始 - UID: {uid}");
 
                 // 1. サーバーから共有キーをダウンロード
                 var serverSharedKeysJson = await _blobStorageService.DownloadSharedKeysAsync(uid);
@@ -314,10 +316,12 @@ namespace Flashnote.Services
                 }
 
                 Debug.WriteLine($"共有キーの同期完了 - ローカル: {_sharedNotes.Count}件, サーバー: {serverSharedNotes.Count}件");
+                SyncLogger.Info("SharedKeys", $"共有キーの同期完了 - ローカル: {_sharedNotes.Count}件, サーバー: {serverSharedNotes.Count}件");
             }
             catch (Exception ex)
             {
                 Debug.WriteLine($"共有キーの同期中にエラー: {ex.Message}");
+                SyncLogger.Error("SharedKeys", ex);
                 throw;
             }
         }

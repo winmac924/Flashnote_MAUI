@@ -938,8 +938,8 @@ namespace Flashnote.Views
                         using (var paint = new SKPaint())
                         {
                             paint.IsAntialias = true;
-                            paint.FilterQuality = SKFilterQuality.High; // 高品質フィルタリング
-                            canvas.DrawBitmap(_backgroundImage, destRect, paint);
+                            var sampling = new SKSamplingOptions(SKFilterMode.Linear, SKMipmapMode.Linear); // 高品質フィルタリング
+                            canvas.DrawBitmap(_backgroundImage, destRect, sampling, paint);
                         }
                     }
                     catch (Exception ex)
@@ -1026,8 +1026,8 @@ namespace Flashnote.Views
                                         using (var paint = new SKPaint())
                                         {
                                             paint.IsAntialias = true;
-                                            paint.FilterQuality = SKFilterQuality.High; // 高品質フィルタリング
-                                            canvas.DrawBitmap(tempBitmap, destRect, paint);
+                                            var sampling = new SKSamplingOptions(SKFilterMode.Linear, SKMipmapMode.Linear); // 高品質フィルタリング
+                                            canvas.DrawBitmap(tempBitmap, destRect, sampling, paint);
                                         }
                                         
                                         drawnPages++;
@@ -1101,36 +1101,33 @@ namespace Flashnote.Views
 
                     // ページ番号のテキストを描画
                     using (var textPaint = new SKPaint())
+                    using (var textFont = new SKFont(SKTypeface.FromFamilyName("Arial", SKFontStyle.Bold), 24.0f * _currentScale)) // フォントを明示的に指定
                     {
                         textPaint.Color = SKColors.Red;
-                        textPaint.TextSize = 24.0f * _currentScale;
                         textPaint.IsAntialias = true;
-                        textPaint.FakeBoldText = true;
-                        textPaint.Typeface = SKTypeface.FromFamilyName("Arial", SKFontStyle.Bold); // フォントを明示的に指定
 
                         // 背景の半透明な矩形
                         using (var bgPaint = new SKPaint())
                         {
                             bgPaint.Color = new SKColor(255, 255, 255, 200); // 半透明白
-                            
+
                             var pageText = $"Page {pageIndex + 1}"; // 英語表記に変更
-                            var textBounds = new SKRect();
-                            textPaint.MeasureText(pageText, ref textBounds);
-                            
+                            textFont.MeasureText(pageText, out var textBounds, textPaint);
+
                             var textX = left + 10 * _currentScale;
                             var textY = top + 30 * _currentScale;
-                            
+
                             // 背景矩形
                             var bgRect = new SKRect(
-                                textX - 5 * _currentScale, 
+                                textX - 5 * _currentScale,
                                 textY - textBounds.Height - 5 * _currentScale,
-                                textX + textBounds.Width + 10 * _currentScale, 
+                                textX + textBounds.Width + 10 * _currentScale,
                                 textY + 5 * _currentScale
                             );
                             canvas.DrawRect(bgRect, bgPaint);
-                            
+
                             // テキスト描画
-                            canvas.DrawText(pageText, textX, textY, textPaint);
+                            canvas.DrawText(pageText, textX, textY, textFont, textPaint);
                         }
                     }
                 }

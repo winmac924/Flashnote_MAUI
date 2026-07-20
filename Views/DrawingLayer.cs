@@ -513,9 +513,7 @@ namespace Flashnote.Views
                             StrokeWidth = _currentPaint.StrokeWidth,
                             Style = _currentPaint.Style,
                             IsAntialias = _currentPaint.IsAntialias,
-                            BlendMode = _currentPaint.BlendMode,
-                            Typeface = _currentPaint.Typeface,
-                            TextSize = _currentPaint.TextSize
+                            BlendMode = _currentPaint.BlendMode
                         };
                         var stroke = new DrawingStroke(_currentPath, paint);
                         
@@ -1044,26 +1042,25 @@ namespace Flashnote.Views
             var textPaint = new SKPaint
             {
                 Color = SKColors.Black,
-                TextSize = 14,
-                IsAntialias = true,
-                Typeface = SKTypeface.Default
+                IsAntialias = true
             };
+            var textFont = new SKFont(SKTypeface.Default, 14);
 
             var buttonStartY = _lastRightClickPoint.Y + 5 + COLOR_BOX_SIZE + 10 + STROKE_WIDTH_BOX_SIZE + 10;
-            
+
             // 元に戻すボタン（コンテキストメニューはUI要素なので変換不要）
             var undoButtonRect = new SKRect(_lastRightClickPoint.X + 5, buttonStartY,
                 _lastRightClickPoint.X + CONTEXT_MENU_WIDTH - 5, buttonStartY + CONTEXT_MENU_ITEM_HEIGHT);
             var undoButtonPaint = new SKPaint { Color = SKColors.LightBlue, Style = SKPaintStyle.Fill };
             canvas.DrawRect(undoButtonRect, undoButtonPaint);
-            canvas.DrawText("元に戻す", _lastRightClickPoint.X + 10, buttonStartY + 20, textPaint);
+            canvas.DrawText("元に戻す", _lastRightClickPoint.X + 10, buttonStartY + 20, textFont, textPaint);
 
             // クリアボタン（コンテキストメニューはUI要素なので変換不要）
             var clearButtonRect = new SKRect(_lastRightClickPoint.X + 5, buttonStartY + CONTEXT_MENU_ITEM_HEIGHT,
                 _lastRightClickPoint.X + CONTEXT_MENU_WIDTH - 5, buttonStartY + CONTEXT_MENU_ITEM_HEIGHT * 2);
             var clearButtonPaint = new SKPaint { Color = SKColors.LightCoral, Style = SKPaintStyle.Fill };
             canvas.DrawRect(clearButtonRect, clearButtonPaint);
-            canvas.DrawText("クリア", _lastRightClickPoint.X + 10, buttonStartY + CONTEXT_MENU_ITEM_HEIGHT + 20, textPaint);
+            canvas.DrawText("クリア", _lastRightClickPoint.X + 10, buttonStartY + CONTEXT_MENU_ITEM_HEIGHT + 20, textFont, textPaint);
 
             // ボタン枠線
             var buttonBorderPaint = new SKPaint { Color = SKColors.Black, Style = SKPaintStyle.Stroke, StrokeWidth = 1 };
@@ -1603,9 +1600,7 @@ namespace Flashnote.Views
                 StrokeWidth = paint.StrokeWidth,
                 Style = paint.Style,
                 IsAntialias = paint.IsAntialias,
-                BlendMode = paint.BlendMode,
-                Typeface = paint.Typeface,
-                TextSize = paint.TextSize
+                BlendMode = paint.BlendMode
             };
         }
 

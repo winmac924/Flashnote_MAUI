@@ -1219,8 +1219,8 @@ namespace Flashnote
                 using (var paint = new SKPaint())
                 {
                     paint.IsAntialias = true;
-                    paint.FilterQuality = SKFilterQuality.High;
-                    canvas.DrawBitmap(imageBitmap, imageRect, paint);
+                    var sampling = new SKSamplingOptions(SKFilterMode.Linear, SKMipmapMode.Linear);
+                    canvas.DrawBitmap(imageBitmap, imageRect, sampling, paint);
                 }
                 
                 Debug.WriteLine($"画像描画完了 - キャンバス全体に表示");

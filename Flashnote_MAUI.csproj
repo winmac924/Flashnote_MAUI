@@ -61,6 +61,13 @@
 	</PropertyGroup>
 
 	<ItemGroup>
+		<!-- テストプロジェクト(Flashnote_MAUI.Tests)配下は本体ビルドの暗黙コンパイル対象から除外 -->
+		<Compile Remove="Flashnote_MAUI.Tests\**" />
+		<EmbeddedResource Remove="Flashnote_MAUI.Tests\**" />
+		<MauiXaml Remove="Flashnote_MAUI.Tests\**" />
+	</ItemGroup>
+
+	<ItemGroup>
 		<!-- App Icon -->
 		<MauiIcon Include="Resources\AppIcon\appicon.svg" />
 
@@ -86,21 +93,22 @@
 	</ItemGroup>
 
 	<ItemGroup>
-		<PackageReference Include="AathifMahir.Maui.MauiIcons.Fluent" Version="5.0.0" />
-		<PackageReference Include="Azure.Storage.Blobs" Version="12.26.0" />
-		<PackageReference Include="CommunityToolkit.Maui" Version="13.0.0" />
+		<PackageReference Include="AathifMahir.Maui.MauiIcons.Fluent" Version="6.0.0" />
+		<PackageReference Include="Azure.Storage.Blobs" Version="12.29.1" />
+		<PackageReference Include="CommunityToolkit.Maui" Version="14.2.0" />
 		<PackageReference Include="FirebaseAuthentication.net" Version="4.1.0" />
-		<PackageReference Include="Microsoft.Data.Sqlite" Version="10.0.1" />
-		<PackageReference Include="Microsoft.Extensions.Logging.Debug" Version="10.0.1" />
-		<PackageReference Include="Microsoft.Extensions.Http" Version="10.0.1" />
+		<PackageReference Include="Microsoft.Data.Sqlite" Version="10.0.9" />
+		<PackageReference Include="Microsoft.Extensions.Logging.Debug" Version="10.0.9" />
+		<PackageReference Include="Microsoft.Extensions.Http" Version="10.0.9" />
 		<PackageReference Include="Microsoft.UI.Xaml" Version="2.8.7" />
 		<PackageReference Include="PdfiumViewer" Version="2.13.0" />
 		<PackageReference Include="PdfiumViewer.Native.x86_64.v8-xfa" Version="2018.4.8.256" />
 		<PackageReference Include="Plugin.Maui.KeyListener" Version="1.0.0-preview1" />
-		<PackageReference Include="SkiaSharp.Views.Maui.Controls" Version="3.119.1" />
+		<PackageReference Include="SkiaSharp.Views.Maui.Controls" Version="4.150.0" />
 		<PackageReference Include="sqlite-net-pcl" Version="1.9.172" />
-		<PackageReference Include="System.Drawing.Common" Version="10.0.1" />
-		<PackageReference Include="Microsoft.Maui.Controls" Version="10.0.20" />
+		<PackageReference Include="SQLitePCLRaw.lib.e_sqlite3" Version="3.53.3" />
+		<PackageReference Include="System.Drawing.Common" Version="10.0.9" />
+		<PackageReference Include="Microsoft.Maui.Controls" Version="10.0.80" />
 	</ItemGroup>
 
 	<ItemGroup>

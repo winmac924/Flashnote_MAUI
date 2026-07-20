@@ -1,0 +1,36 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <IsPackable>false</IsPackable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="coverlet.collector" Version="6.0.4" />
+    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.14.1" />
+    <PackageReference Include="xunit" Version="2.9.3" />
+    <PackageReference Include="xunit.runner.visualstudio" Version="3.1.4" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Using Include="Xunit" />
+  </ItemGroup>
+
+  <!--
+    MAUI本体プロジェクト(Flashnote_MAUI.csproj)はUseMaui=trueでWinUI/WindowsAppSDKに
+    強く結合しているため、テストプロジェクトからProjectReenceせず、
+    MAUIに依存しない純粋なSyncロジックのソースファイルのみをリンクしてテストする。
+  -->
+  <ItemGroup>
+    <Compile Include="..\Services\Sync\SyncPathResolver.cs" Link="SyncSources\SyncPathResolver.cs" />
+    <Compile Include="..\Services\Sync\SyncConcurrency.cs" Link="SyncSources\SyncConcurrency.cs" />
+    <Compile Include="..\Services\Sync\SyncLogger.cs" Link="SyncSources\SyncLogger.cs" />
+    <Compile Include="..\Services\Sync\OfflineSyncQueue.cs" Link="SyncSources\OfflineSyncQueue.cs" />
+    <Compile Include="..\Services\Sync\NoteBackupService.cs" Link="SyncSources\NoteBackupService.cs" />
+    <Compile Include="..\Services\Sync\ConflictManager.cs" Link="SyncSources\ConflictManager.cs" />
+    <Compile Include="..\Services\Sync\IncrementalSyncService.cs" Link="SyncSources\IncrementalSyncService.cs" />
+  </ItemGroup>
+
+</Project>

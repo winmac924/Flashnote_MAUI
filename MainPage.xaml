@@ -5,6 +5,7 @@
              xmlns:converters="clr-namespace:Flashnote.Converters"
              xmlns:fonts="clr-namespace:Flashnote.Resources.Fonts"
              xmlns:views="clr-namespace:Flashnote.Views"
+             xmlns:toolkit="http://schemas.microsoft.com/dotnet/2022/maui/toolkit"
              x:Class="Flashnote.MainPage">
 
     <ContentPage.Resources>
@@ -96,283 +97,370 @@
         </ResourceDictionary>
     </ContentPage.Resources>
 
-    <Grid RowDefinitions="Auto,*">
-        <!-- モダンなヘッダー -->
-        <Frame Grid.Row="0" 
-               HasShadow="True" 
-               BackgroundColor="{AppThemeBinding Dark={StaticResource BackgroundDark}}" 
-               CornerRadius="0" 
-               Padding="5">
-            <Grid>
-                <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="Auto"/>
-                    <ColumnDefinition Width="*"/>
-                    <ColumnDefinition Width="Auto"/>
-                    <ColumnDefinition Width="Auto"/>
-                    <ColumnDefinition Width="Auto"/>
-                    <ColumnDefinition Width="Auto"/>
-                    <ColumnDefinition Width="Auto"/>
-                    <ColumnDefinition Width="Auto"/>
-                </Grid.ColumnDefinitions>
-                
-                <!-- アプリタイトル -->
-                <Label x:Name="AppTitleLabel"
-                       Grid.Column="0" 
-                       Text="📚 Flashnote" 
-                       FontSize="20" 
-                       FontAttributes="Bold" 
-                       VerticalOptions="Center"/>
-
-                <!-- Ankiモードボタン -->
-                <Button Text="学習"
-                        Grid.Column="2"
-                        Style="{StaticResource ModernButtonStyle}"
-                        Clicked="OnAnkiModeClicked"/>
-
-                <!-- インポートドロップダウン -->
-                <Button x:Name="ImportDropdownButton"
-                        Grid.Column="3"
-                        FontFamily="FluentUI"
-                        FontSize="20"
-                        Style="{StaticResource ModernButtonStyle}"
-                        Clicked="OnImportDropdownClicked">
-                    <Button.Text>
-                        <x:Static Member="fonts:FluentUI.arrow_down_48_regular"/>
-                    </Button.Text>
-                </Button>
-                
-                <!-- 同期ボタン -->
-                <Button Grid.Column="4"
-                        FontFamily="FluentUI"
-                        FontSize="20"
-                        Style="{StaticResource ModernButtonStyle}"
-                        Clicked="OnSyncClicked">
-                    <Button.Text>
-                        <x:Static Member="fonts:FluentUI.arrow_sync_24_regular"/>
-                    </Button.Text>
-                </Button>
-                
-                <!-- サブフォルダ同期ボタン -->
-                <Button x:Name="SubFolderSyncButton"
-                        Text="📁 同期"
-                        Grid.Column="5"
-                        FontSize="16"
-                        Style="{StaticResource ModernButtonStyle}"
-                        IsVisible="False"
-                        Clicked="OnSubFolderSyncClicked"/>
-                                
-                <!-- ヘルプボタン -->
-                <Button Grid.Column="6"
-                        FontFamily="FluentUI"
-                        FontSize="18" 
-                        Style="{StaticResource IconButtonStyle}"
-                        WidthRequest="42"
-                        HeightRequest="42"
-                        Clicked="OnHelpClicked">
-                    <Button.Text>
-                        <x:Static Member="fonts:FluentUI.question_circle_24_regular"/>
-                    </Button.Text>
-                </Button>
-                                
-                <!-- 設定ボタン -->
-                <Button Grid.Column="7"
-                        FontFamily="FluentUI"
-                        FontSize="20" 
-                        Style="{StaticResource IconButtonStyle}"
-                        Clicked="OnSettingsClicked">
-                    <Button.Text>
-                        <x:Static Member="fonts:FluentUI.settings_24_regular"/>
-                    </Button.Text>
-                </Button>
-            </Grid>
-        </Frame>
-        
-        <!-- メインコンテンツエリア -->
-        <Grid Grid.Row="1">
-            <!-- ノートリスト -->
-            <ScrollView>
-                <StackLayout Padding="15" Spacing="10">
-                    <!-- ウェルカムメッセージ（ノートがない場合） -->
-                    <Frame x:Name="WelcomeFrame" 
-                           BackgroundColor="#E3F2FD" 
-                           BorderColor="#2196F3" 
-                           CornerRadius="10" 
-                           Padding="20"
-                           Margin="0,10"
-                           IsVisible="False">
-                        <StackLayout>
-                            <Label Text="✨ Flashnoteへようこそ！" 
-                                   FontSize="18" 
-                                   FontAttributes="Bold" 
-                                   TextColor="#1976D2"
-                                   HorizontalOptions="Center"/>
-                            <Label Text="右下の ➕ ボタンでノートを作成しましょう" 
-                                   FontSize="14" 
-                                   TextColor="#424242"
-                                   HorizontalOptions="Center"
-                                   Margin="0,5,0,0"/>
-                        </StackLayout>
-                    </Frame>
+    <!-- ルートを AbsoluteLayout にして、色選択オーバーレイを重ねられるようにする -->
+    <AbsoluteLayout>
+        <Grid AbsoluteLayout.LayoutBounds="0,0,1,1"
+              AbsoluteLayout.LayoutFlags="All"
+              RowDefinitions="Auto,*">
+            <!-- モダンなヘッダー -->
+            <Frame Grid.Row="0" 
+                   HasShadow="True" 
+                   BackgroundColor="{AppThemeBinding Dark={StaticResource BackgroundDark}}" 
+                   CornerRadius="0" 
+                   Padding="5">
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="Auto"/>
+                    </Grid.ColumnDefinitions>
                     
-                    <!-- ノートリスト -->
-                    <CollectionView x:Name="NotesCollectionView"
-                                    ItemsSource="{Binding Notes}"
-                                    Margin="10,0"
-                                    HorizontalOptions="Fill"
-                                    VerticalOptions="Start">
-                        <CollectionView.ItemsLayout>
-                            <GridItemsLayout Orientation="Vertical"
-                                             x:Name="GridLayout"
-                                             HorizontalItemSpacing="10"
-                                             VerticalItemSpacing="10"
-                                             Span="2"/>
-                        </CollectionView.ItemsLayout>
-                        <CollectionView.ItemTemplate>
-                            <DataTemplate>
-                                <Grid>
-                                    <Frame Padding="0"
-                                           HasShadow="False"
-                                           CornerRadius="10"
-                                           WidthRequest="{Binding Source={x:Reference NotesCollectionView}, Path=Width, Converter={StaticResource WidthConverter}}"
-                                           HeightRequest="{Binding Source={x:Reference NotesCollectionView}, Path=Width, Converter={StaticResource HeightConverter}}"
-                                           IsEnabled="True"
-                                           BackgroundColor="Transparent"
-                                           BorderColor="Transparent"
-                                           IsVisible="{Binding IsFolder}">
-                                        <Frame.GestureRecognizers>
-                                            <TapGestureRecognizer Tapped="OnTapped"
-                                                                  CommandParameter="{Binding}"/>
-                                        </Frame.GestureRecognizers>
-                                        <Grid>
-                                            <Image Source="{Binding Icon}"
-                                                   Aspect="AspectFit"
-                                                   HorizontalOptions="Center"
-                                                   VerticalOptions="Center"
-                                                   WidthRequest="{Binding Source={x:Reference NotesCollectionView}, Path=Width, Converter={StaticResource WidthConverter}}"
-                                                   HeightRequest="{Binding Source={x:Reference NotesCollectionView}, Path=Width, Converter={StaticResource HeightConverter}}">
-                                                <Image.Behaviors>
-                                                    <behaviors:FadeInBehavior/>
-                                                </Image.Behaviors>
-                                            </Image>
-                                            <Label Text="{Binding Name}"
-                                                   FontSize="16"
-                                                   FontAttributes="Bold"
-                                                   HorizontalOptions="Center"
-                                                   VerticalOptions="End"
-                                                   Margin="10,0,10,10"
-                                                   TextColor="Black"
-                                                   LineBreakMode="WordWrap"
-                                                   MaxLines="2"/>
-                                        </Grid>
-                                    </Frame>
+                    <!-- アプリタイトル -->
+                    <Label x:Name="AppTitleLabel"
+                           Grid.Column="0" 
+                           Text="📚 Flashnote" 
+                           FontSize="20" 
+                           FontAttributes="Bold" 
+                           VerticalOptions="Center"/>
 
-                                    <Frame Padding="0"
-                                           HasShadow="True"
-                                           CornerRadius="10"
-                                           WidthRequest="{Binding Source={x:Reference NotesCollectionView}, Path=Width, Converter={StaticResource WidthConverter}}"
-                                           HeightRequest="{Binding Source={x:Reference NotesCollectionView}, Path=Width, Converter={StaticResource HeightConverter}}"
-                                           IsEnabled="True"
-                                           BackgroundColor="White"
-                                           IsVisible="{Binding IsFolder, Converter={StaticResource InverseBoolConverter}}">
-                                        <Frame.GestureRecognizers>
-                                            <TapGestureRecognizer Tapped="OnTapped"
-                                                                  CommandParameter="{Binding}"/>
-                                        </Frame.GestureRecognizers>
-                                        <Grid>
-                                            <Image Source="{Binding Icon}"
-                                                   Aspect="AspectFill"
-                                                   HorizontalOptions="Center"
-                                                   VerticalOptions="Center"
-                                                   WidthRequest="{Binding Source={x:Reference NotesCollectionView}, Path=Width, Converter={StaticResource WidthConverter}}"
-                                                   HeightRequest="{Binding Source={x:Reference NotesCollectionView}, Path=Width, Converter={StaticResource HeightConverter}}">
-                                                <Image.Behaviors>
-                                                    <behaviors:FadeInBehavior/>
-                                                </Image.Behaviors>
-                                            </Image>
-                                            <Label Text="{Binding Name}"
-                                                   FontSize="16"
-                                                   FontAttributes="Bold"
-                                                   HorizontalOptions="Center"
-                                                   VerticalOptions="End"
-                                                   Margin="10,0,10,10"
-                                                   TextColor="Black"
-                                                   LineBreakMode="WordWrap"
-                                                   MaxLines="2"/>
-                                        </Grid>
-                                    </Frame>
-                                </Grid>
-                            </DataTemplate>
-                        </CollectionView.ItemTemplate>
-                    </CollectionView>
-                </StackLayout>
-            </ScrollView>
-            
-            <!-- フローティング・アクション・ボタン（新規作成） -->
-            <Button x:Name="FabCreateButton"
-                    Style="{StaticResource FabButtonStyle}"
-                    HorizontalOptions="End"
-                    VerticalOptions="End"
-                    Margin="20,20,20,20"
-                    Clicked="OnFabCreateClicked">
-                <Button.Text>
-                    <x:Static Member="fonts:FluentUI.add_24_regular"/>
-                </Button.Text>
-            </Button>
-            
-            <!-- 新規作成ポップアップメニュー -->
-            <Frame x:Name="CreatePopupFrame"
-                   BackgroundColor="White"
-                   BorderColor="#E0E0E0"
-                   CornerRadius="10"
-                   Padding="0"
-                   HasShadow="True"
-                   HorizontalOptions="End"
-                   VerticalOptions="End"
-                   Margin="20,20,20,80"
-                   IsVisible="False">
-                <StackLayout Spacing="0">
-                    <Button Text="📝 ノート"
-                            BackgroundColor="Transparent"
-                            TextColor="#424242"
-                            FontSize="14"
-                            Clicked="OnCreateNoteClicked"/>
-                    <BoxView HeightRequest="1" BackgroundColor="#E0E0E0"/>
-                    <Button Text="📁 フォルダ"
-                            BackgroundColor="Transparent"
-                            TextColor="#424242"
-                            FontSize="14"
-                            Clicked="OnCreateFolderClicked"/>
-                </StackLayout>
+                    <!-- Ankiモードボタン -->
+                    <Button Text="学習"
+                            Grid.Column="2"
+                            Style="{StaticResource ModernButtonStyle}"
+                            Clicked="OnAnkiModeClicked"/>
+
+                    <!-- インポートドロップダウン -->
+                    <Button x:Name="ImportDropdownButton"
+                            Grid.Column="3"
+                            FontFamily="FluentUI"
+                            FontSize="20"
+                            Style="{StaticResource ModernButtonStyle}"
+                            Clicked="OnImportDropdownClicked">
+                        <Button.Text>
+                            <x:Static Member="fonts:FluentUI.arrow_down_48_regular"/>
+                        </Button.Text>
+                    </Button>
+                    
+                    <!-- 同期ボタン -->
+                    <Button Grid.Column="4"
+                            FontFamily="FluentUI"
+                            FontSize="20"
+                            Style="{StaticResource ModernButtonStyle}"
+                            Clicked="OnSyncClicked">
+                        <Button.Text>
+                            <x:Static Member="fonts:FluentUI.arrow_sync_24_regular"/>
+                        </Button.Text>
+                    </Button>
+                    
+                    <!-- サブフォルダ同期ボタン -->
+                    <Button x:Name="SubFolderSyncButton"
+                            Text="📁 同期"
+                            Grid.Column="5"
+                            FontSize="16"
+                            Style="{StaticResource ModernButtonStyle}"
+                            IsVisible="False"
+                            Clicked="OnSubFolderSyncClicked"/>
+                                    
+                    <!-- ヘルプボタン -->
+                    <Button Grid.Column="6"
+                            FontFamily="FluentUI"
+                            FontSize="18" 
+                            Style="{StaticResource IconButtonStyle}"
+                            WidthRequest="42"
+                            HeightRequest="42"
+                            Clicked="OnHelpClicked">
+                        <Button.Text>
+                            <x:Static Member="fonts:FluentUI.question_circle_24_regular"/>
+                        </Button.Text>
+                    </Button>
+                                    
+                    <!-- 設定ボタン -->
+                    <Button Grid.Column="7"
+                            FontFamily="FluentUI"
+                            FontSize="20" 
+                            Style="{StaticResource IconButtonStyle}"
+                            Clicked="OnSettingsClicked">
+                        <Button.Text>
+                            <x:Static Member="fonts:FluentUI.settings_24_regular"/>
+                        </Button.Text>
+                    </Button>
+                </Grid>
             </Frame>
             
-            <!-- インポートドロップダウンメニュー -->
-            <Frame x:Name="ImportDropdownFrame"
-                   BackgroundColor="White"
-                   BorderColor="#E0E0E0"
-                   CornerRadius="10"
-                   Padding="0"
-                   HasShadow="True"
-                   HorizontalOptions="End"
-                   VerticalOptions="Start"
-                   Margin="0,0,60,0"
-                   IsVisible="False">
-                <StackLayout Spacing="0">
-                    <Button Text="📄 Ankiデッキからインポート"
-                            BackgroundColor="Transparent"
-                            TextColor="#424242"
-                            FontSize="14"
-                            Clicked="OnAnkiImportClicked"/>
-                    <BoxView HeightRequest="1" BackgroundColor="#E0E0E0"/>
-                    <Button Text="🔗 共有キーからインポート"
-                            BackgroundColor="Transparent"
-                            TextColor="#424242"
-                            FontSize="14"
-                            Clicked="OnSharedKeyImportClicked"/>
-                </StackLayout>
-            </Frame>
-            
-            <!-- ヘルプオーバーレイ -->
-            <views:HelpOverlay x:Name="HelpOverlayControl"/>
+            <!-- メインコンテンツエリア -->
+            <Grid Grid.Row="1">
+                <!-- ノートリスト -->
+                <ScrollView>
+                    <StackLayout Padding="15" Spacing="10">
+                        <!-- ウェルカムメッセージ（ノートがない場合） -->
+                        <Frame x:Name="WelcomeFrame" 
+                               BackgroundColor="#E3F2FD" 
+                               BorderColor="#2196F3" 
+                               CornerRadius="10" 
+                               Padding="20"
+                               Margin="0,10"
+                               IsVisible="False">
+                            <StackLayout>
+                                <Label Text="✨ Flashnoteへようこそ！" 
+                                       FontSize="18" 
+                                       FontAttributes="Bold" 
+                                       TextColor="#1976D2"
+                                       HorizontalOptions="Center"/>
+                                <Label Text="右下の ➕ ボタンでノートを作成しましょう" 
+                                       FontSize="14" 
+                                       TextColor="#424242"
+                                       HorizontalOptions="Center"
+                                       Margin="0,5,0,0"/>
+                            </StackLayout>
+                        </Frame>
+                        
+                        <!-- ノートリスト -->
+                        <CollectionView x:Name="NotesCollectionView"
+                                        ItemsSource="{Binding Notes}"
+                                        Margin="10,0"
+                                        HorizontalOptions="Fill"
+                                        VerticalOptions="Start">
+                            <CollectionView.ItemsLayout>
+                                <GridItemsLayout Orientation="Vertical"
+                                                 x:Name="GridLayout"
+                                                 HorizontalItemSpacing="10"
+                                                 VerticalItemSpacing="10"
+                                                 Span="2"/>
+                            </CollectionView.ItemsLayout>
+                            <CollectionView.ItemTemplate>
+                                <DataTemplate>
+                                    <Grid>
+                                        <Frame Padding="0"
+                                               HasShadow="False"
+                                               CornerRadius="10"
+                                               WidthRequest="{Binding Source={x:Reference NotesCollectionView}, Path=Width, Converter={StaticResource WidthConverter}}"
+                                               HeightRequest="{Binding Source={x:Reference NotesCollectionView}, Path=Width, Converter={StaticResource HeightConverter}}"
+                                               IsEnabled="True"
+                                               BackgroundColor="Transparent"
+                                               BorderColor="Transparent"
+                                               IsVisible="{Binding IsFolder}">
+                                            <Frame.GestureRecognizers>
+                                                <TapGestureRecognizer Tapped="OnTapped"
+                                                                      CommandParameter="{Binding}"/>
+                                            </Frame.GestureRecognizers>
+                                            <Grid>
+                                                <Image Source="{Binding Icon}"
+                                                       Aspect="AspectFit"
+                                                       HorizontalOptions="Center"
+                                                       VerticalOptions="Center"
+                                                       WidthRequest="{Binding Source={x:Reference NotesCollectionView}, Path=Width, Converter={StaticResource WidthConverter}}"
+                                                       HeightRequest="{Binding Source={x:Reference NotesCollectionView}, Path=Width, Converter={StaticResource HeightConverter}}">
+                                                    <Image.Behaviors>
+                                                        <behaviors:FadeInBehavior/>
+                                                    </Image.Behaviors>
+                                                </Image>
+
+                                                <!-- metadataのfolderColorを反映する色インジケーター -->
+                                                <BoxView Color="{Binding Color}"
+                                                         HeightRequest="6"
+                                                         CornerRadius="3"
+                                                         HorizontalOptions="Fill"
+                                                         VerticalOptions="Start"
+                                                         Margin="10,6,10,0"/>
+
+                                                <!-- 縦三点メニュー（右上） -->
+                                                <Button Text="⋮"
+                                                        FontSize="18"
+                                                        BackgroundColor="Transparent"
+                                                        TextColor="Black"
+                                                        Padding="6"
+                                                        HorizontalOptions="End"
+                                                        VerticalOptions="Start"
+                                                        Margin="6,32,6,6"
+                                                        Clicked="OnItemMenuClicked"
+                                                        CommandParameter="{Binding}" />
+
+                                                <Label Text="{Binding Name}"
+                                                       FontSize="16"
+                                                       FontAttributes="Bold"
+                                                       HorizontalOptions="Center"
+                                                       VerticalOptions="End"
+                                                       Margin="10,0,10,10"
+                                                       TextColor="Black"
+                                                       LineBreakMode="WordWrap"
+                                                       MaxLines="2"/>
+                                            </Grid>
+                                        </Frame>
+
+                                        <Frame Padding="0"
+                                               HasShadow="True"
+                                               CornerRadius="10"
+                                               WidthRequest="{Binding Source={x:Reference NotesCollectionView}, Path=Width, Converter={StaticResource WidthConverter}}"
+                                               HeightRequest="{Binding Source={x:Reference NotesCollectionView}, Path=Width, Converter={StaticResource HeightConverter}}"
+                                               IsEnabled="True"
+                                               BackgroundColor="White"
+                                               IsVisible="{Binding IsFolder, Converter={StaticResource InverseBoolConverter}}">
+                                            <Frame.GestureRecognizers>
+                                                <TapGestureRecognizer Tapped="OnTapped"
+                                                                      CommandParameter="{Binding}"/>
+                                            </Frame.GestureRecognizers>
+                                            <Grid>
+                                                <Image Source="{Binding Icon}"
+                                                       Aspect="AspectFill"
+                                                       HorizontalOptions="Center"
+                                                       VerticalOptions="Center"
+                                                       WidthRequest="{Binding Source={x:Reference NotesCollectionView}, Path=Width, Converter={StaticResource WidthConverter}}"
+                                                       HeightRequest="{Binding Source={x:Reference NotesCollectionView}, Path=Width, Converter={StaticResource HeightConverter}}">
+                                                    <Image.Behaviors>
+                                                        <behaviors:FadeInBehavior/>
+                                                    </Image.Behaviors>
+                                                </Image>
+
+                                                <!-- metadataのnoteColorを反映する色インジケーター -->
+                                                <BoxView Color="{Binding Color}"
+                                                         HeightRequest="6"
+                                                         CornerRadius="3"
+                                                         HorizontalOptions="Fill"
+                                                         VerticalOptions="Start"
+                                                         Margin="10,6,10,0"/>
+
+                                                <!-- 縦三点メニュー（右上） -->
+                                                <Button Text="⋮"
+                                                        FontSize="18"
+                                                        BackgroundColor="Transparent"
+                                                        TextColor="Black"
+                                                        Padding="6"
+                                                        HorizontalOptions="End"
+                                                        VerticalOptions="Start"
+                                                        Margin="6"
+                                                        Clicked="OnItemMenuClicked"
+                                                        CommandParameter="{Binding}" />
+
+                                                <Label Text="{Binding Name}"
+                                                       FontSize="16"
+                                                       FontAttributes="Bold"
+                                                       HorizontalOptions="Center"
+                                                       VerticalOptions="End"
+                                                       Margin="10,0,10,10"
+                                                       TextColor="Black"
+                                                       LineBreakMode="WordWrap"
+                                                       MaxLines="2"/>
+                                            </Grid>
+                                        </Frame>
+                                    </Grid>
+                                </DataTemplate>
+                            </CollectionView.ItemTemplate>
+                        </CollectionView>
+                    </StackLayout>
+                </ScrollView>
+                
+                <!-- フローティング・アクション・ボタン（新規作成） -->
+                <Button x:Name="FabCreateButton"
+                        Style="{StaticResource FabButtonStyle}"
+                        HorizontalOptions="End"
+                        VerticalOptions="End"
+                        Margin="20,20,20,20"
+                        Clicked="OnFabCreateClicked">
+                    <Button.Text>
+                        <x:Static Member="fonts:FluentUI.add_24_regular"/>
+                    </Button.Text>
+                </Button>
+                
+                <!-- 新規作成ポップアップメニュー -->
+                <Frame x:Name="CreatePopupFrame"
+                       BackgroundColor="White"
+                       BorderColor="#E0E0E0"
+                       CornerRadius="10"
+                       Padding="0"
+                       HasShadow="True"
+                       HorizontalOptions="End"
+                       VerticalOptions="End"
+                       Margin="20,20,20,80"
+                       IsVisible="False">
+                    <StackLayout Spacing="0">
+                        <Button Text="📝 ノート"
+                                BackgroundColor="Transparent"
+                                TextColor="#424242"
+                                FontSize="14"
+                                Clicked="OnCreateNoteClicked"/>
+                        <BoxView HeightRequest="1" BackgroundColor="#E0E0E0"/>
+                        <Button Text="📁 フォルダ"
+                                BackgroundColor="Transparent"
+                                TextColor="#424242"
+                                FontSize="14"
+                                Clicked="OnCreateFolderClicked"/>
+                    </StackLayout>
+                </Frame>
+                
+                <!-- インポートドロップダウンメニュー -->
+                <Frame x:Name="ImportDropdownFrame"
+                       BackgroundColor="White"
+                       BorderColor="#E0E0E0"
+                       CornerRadius="10"
+                       Padding="0"
+                       HasShadow="True"
+                       HorizontalOptions="End"
+                       VerticalOptions="Start"
+                       Margin="0,0,60,0"
+                       IsVisible="False">
+                    <StackLayout Spacing="0">
+                        <Button Text="📄 Ankiデッキからインポート"
+                                BackgroundColor="Transparent"
+                                TextColor="#424242"
+                                FontSize="14"
+                                Clicked="OnAnkiImportClicked"/>
+                        <BoxView HeightRequest="1" BackgroundColor="#E0E0E0"/>
+                        <Button Text="🔗 共有キーからインポート"
+                                BackgroundColor="Transparent"
+                                TextColor="#424242"
+                                FontSize="14"
+                                Clicked="OnSharedKeyImportClicked"/>
+                    </StackLayout>
+                </Frame>
+                
+                <!-- ヘルプオーバーレイ -->
+                <views:HelpOverlay x:Name="HelpOverlayControl"/>
+            </Grid>
         </Grid>
-    </Grid>
+
+        <!-- 色選択オーバーレイ（擬似ポップアップ） -->
+        <Grid x:Name="ColorPickerOverlay"
+              AbsoluteLayout.LayoutBounds="0,0,1,1"
+              AbsoluteLayout.LayoutFlags="All"
+              IsVisible="False"
+              BackgroundColor="#80000000">
+
+            <!-- 背景タップで閉じるための透明ボタン（カード以外） -->
+            <Button BackgroundColor="Transparent"
+                    Clicked="OnColorPickerOverlayDismissed" />
+
+            <!-- カード本体 -->
+            <Frame BackgroundColor="White"
+                   CornerRadius="16"
+                   Padding="16"
+                   HasShadow="True"
+                   HorizontalOptions="Center"
+                   VerticalOptions="Center">
+                <VerticalStackLayout Spacing="12">
+                    <Label Text="色を選択"
+                           FontAttributes="Bold"
+                           FontSize="16"
+                           TextColor="Black" />
+
+                    <ScrollView Orientation="Horizontal">
+                        <HorizontalStackLayout x:Name="ColorPickerRow"
+                                               Spacing="12"
+                                               Padding="0,0,0,0" />
+                    </ScrollView>
+
+                    <Button Text="キャンセル"
+                            HorizontalOptions="End"
+                            BackgroundColor="Transparent"
+                            TextColor="Black"
+                            Clicked="OnColorPickerOverlayDismissed" />
+                </VerticalStackLayout>
+            </Frame>
+        </Grid>
+
+    </AbsoluteLayout>
 </ContentPage>

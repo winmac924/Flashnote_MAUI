@@ -1,10 +1,15 @@
-﻿
-using Flashnote.Services;
+﻿using Flashnote.Services;
+using Flashnote.Services.Sync;
 using Flashnote.ViewModels;
 using Flashnote.Models;
 using System.Diagnostics;
 using System.IO.Compression;
 using System.Text.Json;
+using System;
+using System.Collections.Generic;
+using System.Linq;
+using Microsoft.Maui.Controls;
+using Microsoft.Maui.Graphics;
 
 namespace Flashnote
 {
@@ -16,8 +21,7 @@ namespace Flashnote
         private Note _selectedNote;
         private Stack<string> _currentPath = new Stack<string>();
         // `C:\Users\ユーザー名\Documents\Flashnote` に保存
-        private static readonly string FolderPath = Path.Combine(
-            Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments), "Flashnote");
+        private static readonly string FolderPath = SyncPathResolver.GetLocalNoteRoot();
         private readonly CardSyncService _cardSyncService;
         private readonly UpdateNotificationService _updateService;
         private readonly BlobStorageService _blobStorageService;
@@ -30,6 +34,7 @@ namespace Flashnote
         private bool _isShiftDown = false; // Shiftキー押下状態を管理
         private bool _keyboardEventsSetup = false; // キーボードイベント設定済みフラグ
         private bool _isProcessingKeyboardEvent = false; // キーボードイベント処理中フラグ
+        private TaskCompletionSource<string?>? _colorPickerTcs;
 
         public MainPage(CardSyncService cardSyncService, UpdateNotificationService updateService, BlobStorageService blobStorageService, SharedKeyService sharedKeyService, FileWatcherService fileWatcherService)
         {
@@ -84,6 +89,229 @@ namespace Flashnote
             if (NotesCollectionView != null)
             {
                 NotesCollectionView.VerticalOptions = LayoutOptions.Start;
+            }
+
+            _viewModel.ContextMenuRequested += OnContextMenuRequested;
+        }
+
+        private async void OnContextMenuRequested(object sender, Note note)
+        {
+            try
+            {
+                // 右クリック/長押し相当でメニュー
+                var action = await DisplayActionSheet(note.Name, "キャンセル", null, "色の変更");
+                if (action == "色の変更")
+                {
+                    await OnChangeColorForNoteAsync(note);
+                }
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"ContextMenu error: {ex.Message}");
+            }
+        }
+
+        private async Task OnChangeColorForNoteAsync(Note note)
+        {
+            try
+            {
+                var options = BuildColorOptions();
+                if (options.Count == 0)
+                {
+                    await DisplayAlert("エラー", "色の候補が見つかりませんでした。", "OK");
+                    return;
+                }
+
+                var selectedKey = await ShowColorPickerOverlayAsync(options);
+                if (string.IsNullOrWhiteSpace(selectedKey))
+                    return;
+
+                if (note.IsFolder)
+                {
+                    if (!string.IsNullOrWhiteSpace(note.FullPath) && Directory.Exists(note.FullPath))
+                    {
+                        SaveFolderColor(note.FullPath, selectedKey);
+                    }
+                }
+                else
+                {
+                    if (!string.IsNullOrWhiteSpace(note.FullPath) && File.Exists(note.FullPath))
+                    {
+                        SaveNoteColor(note.FullPath, selectedKey);
+                    }
+                }
+
+                LoadNotes();
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"OnChangeColorForNoteAsync error: {ex.Message}");
+            }
+        }
+
+        private static void SaveFolderColor(string folderPath, string colorKey)
+        {
+            try
+            {
+                var metadataPath = Path.Combine(folderPath, "metadata.json");
+
+                Dictionary<string, object?> obj;
+                if (File.Exists(metadataPath))
+                {
+                    try
+                    {
+                        var existingJson = File.ReadAllText(metadataPath);
+                        obj = System.Text.Json.JsonSerializer.Deserialize<Dictionary<string, object?>>(existingJson)
+                              ?? new Dictionary<string, object?>();
+                    }
+                    catch
+                    {
+                        obj = new Dictionary<string, object?>();
+                    }
+                }
+                else
+                {
+                    obj = new Dictionary<string, object?>();
+                }
+
+                obj["folderColor"] = colorKey;
+
+                // 既存コードが updatedAt を使っているので、あれば更新しておく
+                obj["updatedAt"] = DateTime.UtcNow.ToString("yyyy-MM-ddTHH:mm:ssZ");
+
+                var json = System.Text.Json.JsonSerializer.Serialize(obj, new System.Text.Json.JsonSerializerOptions
+                {
+                    WriteIndented = true
+                });
+
+                File.WriteAllText(metadataPath, json);
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"SaveFolderColor error: {ex.Message}");
+            }
+        }
+
+        private static string? ReadFolderColor(string folderPath)
+        {
+            try
+            {
+                var metadataPath = Path.Combine(folderPath, "metadata.json");
+                if (!File.Exists(metadataPath))
+                    return null;
+
+                using var doc = System.Text.Json.JsonDocument.Parse(File.ReadAllText(metadataPath));
+                var root = doc.RootElement;
+
+                if (root.TryGetProperty("folderColor", out var p) && p.ValueKind == System.Text.Json.JsonValueKind.String)
+                {
+                    var v = p.GetString();
+                    return string.IsNullOrWhiteSpace(v) ? null : v;
+                }
+
+                return null;
+            }
+            catch
+            {
+                return null;
+            }
+        }
+
+        /// <summary>
+        /// .ankpls(zip) 内の metadata.json エントリを読み取る。存在しなければ null。
+        /// ノート一覧表示・色分け読み書き・同期処理など複数箇所で使う共通ヘルパー。
+        /// </summary>
+        private static string? TryReadAnkplsMetadataJson(string ankplsFilePath)
+        {
+            try
+            {
+                using var archive = ZipFile.OpenRead(ankplsFilePath);
+                var metaEntry = archive.Entries.FirstOrDefault(e => e.Name.Equals("metadata.json", StringComparison.OrdinalIgnoreCase));
+                if (metaEntry == null) return null;
+
+                using var stream = metaEntry.Open();
+                using var reader = new StreamReader(stream);
+                return reader.ReadToEnd();
+            }
+            catch
+            {
+                return null;
+            }
+        }
+
+        /// <summary>
+        /// ノート本体(.ankpls)内の metadata.json に noteColor を書き込む（フォルダの色分けと同様のパターン）。
+        /// </summary>
+        private static void SaveNoteColor(string ankplsFilePath, string colorKey)
+        {
+            try
+            {
+                Dictionary<string, object?> obj = new();
+
+                var existingJson = TryReadAnkplsMetadataJson(ankplsFilePath);
+                bool hasExistingEntry = existingJson != null;
+                if (hasExistingEntry)
+                {
+                    try
+                    {
+                        obj = System.Text.Json.JsonSerializer.Deserialize<Dictionary<string, object?>>(existingJson)
+                              ?? new Dictionary<string, object?>();
+                    }
+                    catch
+                    {
+                        obj = new Dictionary<string, object?>();
+                    }
+                }
+
+                obj["noteColor"] = colorKey;
+                obj["updatedAt"] = DateTime.UtcNow.ToString("yyyy-MM-ddTHH:mm:ssZ");
+
+                var json = System.Text.Json.JsonSerializer.Serialize(obj, new System.Text.Json.JsonSerializerOptions
+                {
+                    WriteIndented = true
+                });
+
+                using var updateArchive = ZipFile.Open(ankplsFilePath, ZipArchiveMode.Update);
+                var existingEntry = updateArchive.Entries.FirstOrDefault(e => e.Name.Equals("metadata.json", StringComparison.OrdinalIgnoreCase));
+                existingEntry?.Delete();
+
+                var newEntry = updateArchive.CreateEntry(hasExistingEntry && existingEntry != null ? existingEntry.FullName : "metadata.json");
+                using (var entryStream = newEntry.Open())
+                using (var writer = new StreamWriter(entryStream))
+                {
+                    writer.Write(json);
+                }
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"SaveNoteColor error: {ex.Message}");
+            }
+        }
+
+        /// <summary>
+        /// ノート本体(.ankpls)内の metadata.json から noteColor を読み取る。
+        /// </summary>
+        private static string? ReadNoteColor(string ankplsFilePath)
+        {
+            try
+            {
+                var json = TryReadAnkplsMetadataJson(ankplsFilePath);
+                if (json == null) return null;
+
+                using var doc = System.Text.Json.JsonDocument.Parse(json);
+                var root = doc.RootElement;
+
+                if (root.TryGetProperty("noteColor", out var p) && p.ValueKind == System.Text.Json.JsonValueKind.String)
+                {
+                    var v = p.GetString();
+                    return string.IsNullOrWhiteSpace(v) ? null : v;
+                }
+
+                return null;
+            }
+            catch
+            {
+                return null;
             }
         }
 
@@ -609,13 +837,16 @@ namespace Flashnote
                 {
                     Debug.WriteLine($"フォルダmetadata読み込み失敗: {dir} - {ex.Message}");
                 }
+                var folderColor = ReadFolderColor(dir);
+
                 items.Add(new Note
                 {
                     Name = dirName,
                     Icon = "folder.png",
                     IsFolder = true,
                     FullPath = dir,
-                    LastModified = Directory.GetLastWriteTime(dir)
+                    LastModified = Directory.GetLastWriteTime(dir),
+                    Color = !string.IsNullOrWhiteSpace(folderColor) ? GetColorFromName(folderColor) : Colors.Transparent
                 });
             }
 
@@ -630,13 +861,9 @@ namespace Flashnote
                     bool found = false;
                     try
                     {
-                        using var archive = ZipFile.OpenRead(file);
-                        var metaEntry = archive.Entries.FirstOrDefault(e => e.Name.Equals("metadata.json", StringComparison.OrdinalIgnoreCase));
-                        if (metaEntry != null)
+                        var json = TryReadAnkplsMetadataJson(file);
+                        if (json != null)
                         {
-                            using var stream = metaEntry.Open();
-                            using var reader = new StreamReader(stream);
-                            var json = reader.ReadToEnd();
                             using var doc = System.Text.Json.JsonDocument.Parse(json);
                             if (doc.RootElement.TryGetProperty("originalName", out var p))
                             {
@@ -670,13 +897,17 @@ namespace Flashnote
                 {
                     Debug.WriteLine($".ankpls metadata 読み込み失敗: {file} - {ex.Message}");
                 }
+
+                var noteColor = ReadNoteColor(file);
+
                 items.Add(new Note
                 {
                     Name = fileName,
                     Icon = "note1.png",
                     IsFolder = false,
                     FullPath = file,
-                    LastModified = File.GetLastWriteTime(file)
+                    LastModified = File.GetLastWriteTime(file),
+                    Color = !string.IsNullOrWhiteSpace(noteColor) ? GetColorFromName(noteColor) : Colors.Transparent
                 });
             }
 
@@ -853,6 +1084,7 @@ namespace Flashnote
                             var networkStateService = MauiProgram.Services?.GetService<NetworkStateService>();
                             bool isNetworkAvailable = networkStateService?.IsNetworkAvailable ?? false;
                             
+
                             // オンラインの場合のみ同期処理を実行
                             if (isNetworkAvailable)
                             {
@@ -900,6 +1132,7 @@ namespace Flashnote
                                 errorMessage = "同期処理中にエラーが発生しました。ローカルに保存されているカードで学習を開始します。";
                             }
                             
+
                             // オフライン時はトーストで軽く通知
                             if (ex.Message.Contains("オフラインのため") || ex.Message.Contains("インターネット接続"))
                             {
@@ -973,18 +1206,7 @@ namespace Flashnote
             
             // 現在のフォルダが共有フォルダかどうかをチェック
             var currentFolder = _currentPath.Peek();
-            var documentsPath = Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments);
-            var flashnotePath = Path.Combine(documentsPath, "Flashnote");
-            
-            string subFolder = null;
-            if (currentFolder.StartsWith(flashnotePath, StringComparison.OrdinalIgnoreCase))
-            {
-                var relativePath = Path.GetRelativePath(flashnotePath, currentFolder);
-                if (relativePath != "." && !relativePath.StartsWith("."))
-                {
-                    subFolder = relativePath;
-                }
-            }
+            string subFolder = Flashnote.Services.Sync.SyncPathResolver.GetSubFolderFromLocalPath(currentFolder);
             
             // 共有フォルダかどうかをチェック（情報取得のため）
             bool isInSharedFolder = !string.IsNullOrEmpty(subFolder) && _sharedKeyService.IsInSharedFolder("", subFolder);
@@ -1012,18 +1234,7 @@ namespace Flashnote
             
             // 現在のフォルダが共有フォルダかどうかをチェック
             var currentFolder = _currentPath.Peek();
-            var documentsPath = Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments);
-            var flashnotePath = Path.Combine(documentsPath, "Flashnote");
-            
-            string subFolder = null;
-            if (currentFolder.StartsWith(flashnotePath, StringComparison.OrdinalIgnoreCase))
-            {
-                var relativePath = Path.GetRelativePath(flashnotePath, currentFolder);
-                if (relativePath != "." && !relativePath.StartsWith("."))
-                {
-                    subFolder = relativePath;
-                }
-            }
+            string subFolder = Flashnote.Services.Sync.SyncPathResolver.GetSubFolderFromLocalPath(currentFolder);
             
             // 共有フォルダかどうかをチェック（情報取得のため）
             bool isInSharedFolder = !string.IsNullOrEmpty(subFolder) && _sharedKeyService.IsInSharedFolder("", subFolder);
@@ -1117,18 +1328,7 @@ namespace Flashnote
             
             // 現在のフォルダが共有フォルダかどうかをチェック
             var currentFolder = _currentPath.Peek();
-            var documentsPath = Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments);
-            var flashnotePath = Path.Combine(documentsPath, "Flashnote");
-            
-            string subFolder = null;
-            if (currentFolder.StartsWith(flashnotePath, StringComparison.OrdinalIgnoreCase))
-            {
-                var relativePath = Path.GetRelativePath(flashnotePath, currentFolder);
-                if (relativePath != "." && !relativePath.StartsWith("."))
-                {
-                    subFolder = relativePath;
-                }
-            }
+            string subFolder = Flashnote.Services.Sync.SyncPathResolver.GetSubFolderFromLocalPath(currentFolder);
             
             // 共有フォルダかどうかをチェック（情報取得のため）
             bool isInSharedFolder = !string.IsNullOrEmpty(subFolder) && _sharedKeyService.IsInSharedFolder("", subFolder);
@@ -1279,93 +1479,7 @@ namespace Flashnote
                 _viewModel.Notes.Insert(0, newNote);
                 Debug.WriteLine($"ノートを追加しました: {noteName}");
 
-                // Blob Storageに即座にアップロード
-                try
-                {
-                    var uid = App.CurrentUser?.Uid;
-                    if (!string.IsNullOrEmpty(uid))
-                    {
-                        Debug.WriteLine($"Blob Storageへのアップロード開始: {noteName}");
-
-                        // サブフォルダを取得
-                        string uploadSubFolder = null;
-                        var documentsPath = Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments);
-                        var flashnotePath = Path.Combine(documentsPath, "Flashnote");
-
-                        if (currentFolder.StartsWith(flashnotePath, StringComparison.OrdinalIgnoreCase))
-                        {
-                            var relativePath = Path.GetRelativePath(flashnotePath, currentFolder);
-                            if (relativePath != ".")
-                            {
-                                uploadSubFolder = relativePath;
-                            }
-                        }
-
-                        Debug.WriteLine($"サブフォルダ: {uploadSubFolder ?? "ルート"}");
-
-                        // cards.txtをBlob Storageにアップロード
-                        var cardsContent = "0\n";
-                        await _blobStorageService.SaveNoteAsync(uid, noteName, cardsContent, uploadSubFolder);
-                        Debug.WriteLine($"cards.txtをBlob Storageにアップロード完了: {noteName}");
-
-                        // metadata.json をアップロード
-                        try
-                        {
-                            var localMetadataPath = Path.Combine(tempFolder, "metadata.json");
-                            if (File.Exists(localMetadataPath))
-                            {
-                                var metadataContent = File.ReadAllText(localMetadataPath);
-                                await _blobStorageService.SaveNoteAsync(uid, $"{noteName}/metadata.json", metadataContent, uploadSubFolder);
-                                Debug.WriteLine($"metadata.json をBlob Storageにアップロードしました: {noteName}/metadata.json");
-                            }
-                        }
-                        catch (Exception ex)
-                        {
-                            Debug.WriteLine($"metadata.json Blobアップロード中にエラー: {ex.Message}");
-                        }
-
-                        // 一時フォルダを正しい場所にコピー（同期処理で使用されるため）
-                        var correctTempFolder = Path.Combine(
-                            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-                            "Flashnote",
-                            uploadSubFolder ?? "",
-                            noteName + "_temp");
-
-                        if (Directory.Exists(correctTempFolder))
-                        {
-                            Directory.Delete(correctTempFolder, true);
-                        }
-
-                        // ディレクトリを作成
-                        Directory.CreateDirectory(Path.GetDirectoryName(correctTempFolder));
-
-                        // 一時フォルダの内容をコピー
-                        foreach (var file in Directory.GetFiles(tempFolder, "*", SearchOption.AllDirectories))
-                        {
-                            var relativePath = Path.GetRelativePath(tempFolder, file);
-                            var targetPath = Path.Combine(correctTempFolder, relativePath);
-                            var targetDir = Path.GetDirectoryName(targetPath);
-
-                            if (!Directory.Exists(targetDir))
-                            {
-                                Directory.CreateDirectory(targetDir);
-                            }
-
-                            File.Copy(file, targetPath, true);
-                        }
-
-                        Debug.WriteLine($"一時フォルダを正しい場所にコピー完了: {correctTempFolder}");
-                    }
-                    else
-                    {
-                        Debug.WriteLine("ユーザーIDが取得できないため、Blob Storageへのアップロードをスキップ");
-                    }
-                }
-                catch (Exception ex)
-                {
-                    Debug.WriteLine($"Blob Storageへのアップロード中にエラー: {ex.Message}");
-                    // アップロードに失敗してもローカルノートの作成は続行
-                }
+                await UploadNewNoteToBlobAsync(noteName, currentFolder, tempFolder);
 
                 // メインページを更新
                 LoadNotes();
@@ -1375,6 +1489,101 @@ namespace Flashnote
             {
                 Debug.WriteLine($"新規ノート作成中にエラー: {ex.Message}");
                 throw;
+            }
+        }
+
+        /// <summary>
+        /// 新規作成したノート（cards.txt + metadata.json）をBlob Storageにアップロードし、
+        /// 同期処理が使う一時フォルダにも複製する。
+        /// SaveNewNoteAsync / SaveNewNoteInSharedFolderAsync の共通処理。
+        /// </summary>
+        private async Task UploadNewNoteToBlobAsync(string noteName, string currentFolder, string tempFolder)
+        {
+            try
+            {
+                var uid = App.CurrentUser?.Uid;
+                if (!string.IsNullOrEmpty(uid))
+                {
+                    Debug.WriteLine($"Blob Storageへのアップロード開始: {noteName}");
+
+                    // サブフォルダを取得
+                    string uploadSubFolder = null;
+                    var documentsPath = Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments);
+                    var flashnotePath = Path.Combine(documentsPath, "Flashnote");
+
+                    if (currentFolder.StartsWith(flashnotePath, StringComparison.OrdinalIgnoreCase))
+                    {
+                        var relativePath = Path.GetRelativePath(flashnotePath, currentFolder);
+                        if (relativePath != ".")
+                        {
+                            uploadSubFolder = relativePath;
+                        }
+                    }
+
+                    Debug.WriteLine($"サブフォルダ: {uploadSubFolder ?? "ルート"}");
+
+                    // cards.txtをBlob Storageにアップロード
+                    var cardsContent = "0\n";
+                    await _blobStorageService.SaveNoteAsync(uid, noteName, cardsContent, uploadSubFolder);
+                    Debug.WriteLine($"cards.txtをBlob Storageにアップロード完了: {noteName}");
+
+                    // metadata.json をアップロード
+                    try
+                    {
+                        var localMetadataPath = Path.Combine(tempFolder, "metadata.json");
+                        if (File.Exists(localMetadataPath))
+                        {
+                            var metadataContent = File.ReadAllText(localMetadataPath);
+                            await _blobStorageService.SaveNoteAsync(uid, $"{noteName}/metadata.json", metadataContent, uploadSubFolder);
+                            Debug.WriteLine($"metadata.json をBlob Storageにアップロードしました: {noteName}/metadata.json");
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        Debug.WriteLine($"metadata.json Blobアップロード中にエラー: {ex.Message}");
+                    }
+
+                    // 一時フォルダを正しい場所にコピー（同期処理で使用されるため）
+                    var correctTempFolder = Path.Combine(
+                        Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+                        "Flashnote",
+                        uploadSubFolder ?? "",
+                        noteName + "_temp");
+
+                    if (Directory.Exists(correctTempFolder))
+                    {
+                        Directory.Delete(correctTempFolder, true);
+                    }
+
+                    // ディレクトリを作成
+                    Directory.CreateDirectory(Path.GetDirectoryName(correctTempFolder));
+
+                    // 一時フォルダの内容をコピー
+                    foreach (var file in Directory.GetFiles(tempFolder, "*", SearchOption.AllDirectories))
+                    {
+                        var relativePath = Path.GetRelativePath(tempFolder, file);
+                        var targetPath = Path.Combine(correctTempFolder, relativePath);
+                        var targetDir = Path.GetDirectoryName(targetPath);
+
+                        if (!Directory.Exists(targetDir))
+                        {
+                            Directory.CreateDirectory(targetDir);
+                        }
+
+                        File.Copy(file, targetPath, true);
+                    }
+
+                    Debug.WriteLine($"一時フォルダを正しい場所にコピー完了: {correctTempFolder}");
+                }
+                else
+                {
+                    Debug.WriteLine("ユーザーIDが取得できないため、Blob Storageへのアップロードをスキップ");
+                }
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"Blob Storageへのアップロード中にエラー: {ex.Message}");
+                // アップロードに失敗してもローカルノートの作成は続行
             }
         }
 
@@ -1425,7 +1634,7 @@ namespace Flashnote
                         
                         // Blob Storageではフォルダを直接作成できないため、プレースホルダーファイルを作成
                         // これにより、フォルダ構造が維持される
-                        var placeholderContent = "# This is a placeholder file to maintain folder structure";
+                        var placeholderContent = "# このフォルダはプレースホルダーファイルです。";
                         await _blobStorageService.SaveNoteAsync(uid, folderPath, ".folder_placeholder", placeholderContent);
                         Debug.WriteLine($"フォルダプレースホルダーをBlob Storageに作成: {folderPath}/.folder_placeholder");
                     }
@@ -1515,6 +1724,7 @@ namespace Flashnote
                                 var content = reader.ReadToEnd();
                                 Debug.WriteLine($"Found results.txt with {content.Length} characters in {ankplsFile}");
                                 
+
                                 // results.txtを一時フォルダに保存
                                 File.WriteAllText(Path.Combine(tempFolder, "results.txt"), content);
                             }
@@ -2011,7 +2221,7 @@ namespace Flashnote
             
             Debug.WriteLine($"CheckIfSharedFolder - 現在のフォルダ: {currentFolder}");
             Debug.WriteLine($"CheckIfSharedFolder - Flashnoteパス: {flashnotePath}");
-            
+
             string subFolder = null;
             if (currentFolder.StartsWith(flashnotePath, StringComparison.OrdinalIgnoreCase))
             {
@@ -2129,93 +2339,7 @@ namespace Flashnote
                 _viewModel.Notes.Insert(0, newNote);
                 Debug.WriteLine($"ノートを追加しました: {noteName}");
 
-                // Blob Storageに即座にアップロード
-                try
-                {
-                    var uid = App.CurrentUser?.Uid;
-                    if (!string.IsNullOrEmpty(uid))
-                    {
-                        Debug.WriteLine($"Blob Storageへのアップロード開始: {noteName}");
-
-                        // サブフォルダを取得
-                        string uploadSubFolder = null;
-                        var documentsPath = Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments);
-                        var flashnotePath = Path.Combine(documentsPath, "Flashnote");
-
-                        if (currentFolder.StartsWith(flashnotePath, StringComparison.OrdinalIgnoreCase))
-                        {
-                            var relativePath = Path.GetRelativePath(flashnotePath, currentFolder);
-                            if (relativePath != ".")
-                            {
-                                uploadSubFolder = relativePath;
-                            }
-                        }
-
-                        Debug.WriteLine($"サブフォルダ: {uploadSubFolder ?? "ルート"}");
-
-                        // cards.txtをBlob Storageにアップロード
-                        var cardsContent = "0\n";
-                        await _blobStorageService.SaveNoteAsync(uid, noteName, cardsContent, uploadSubFolder);
-                        Debug.WriteLine($"cards.txtをBlob Storageにアップロード完了: {noteName}");
-
-                        // metadata.json をアップロード
-                        try
-                        {
-                            var localMetadataPath = Path.Combine(tempFolder, "metadata.json");
-                            if (File.Exists(localMetadataPath))
-                            {
-                                var metadataContent = File.ReadAllText(localMetadataPath);
-                                await _blobStorageService.SaveNoteAsync(uid, $"{noteName}/metadata.json", metadataContent, uploadSubFolder);
-                                Debug.WriteLine($"metadata.json をBlob Storageにアップロードしました: {noteName}/metadata.json");
-                            }
-                        }
-                        catch (Exception ex)
-                        {
-                            Debug.WriteLine($"metadata.json Blobアップロード中にエラー: {ex.Message}");
-                        }
-
-                        // 一時フォルダを正しい場所にコピー（同期処理で使用されるため）
-                        var correctTempFolder = Path.Combine(
-                            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-                            "Flashnote",
-                            uploadSubFolder ?? "",
-                            noteName + "_temp");
-
-                        if (Directory.Exists(correctTempFolder))
-                        {
-                            Directory.Delete(correctTempFolder, true);
-                        }
-
-                        // ディレクトリを作成
-                        Directory.CreateDirectory(Path.GetDirectoryName(correctTempFolder));
-
-                        // 一時フォルダの内容をコピー
-                        foreach (var file in Directory.GetFiles(tempFolder, "*", SearchOption.AllDirectories))
-                        {
-                            var relativePath = Path.GetRelativePath(tempFolder, file);
-                            var targetPath = Path.Combine(correctTempFolder, relativePath);
-                            var targetDir = Path.GetDirectoryName(targetPath);
-
-                            if (!Directory.Exists(targetDir))
-                            {
-                                Directory.CreateDirectory(targetDir);
-                            }
-
-                            File.Copy(file, targetPath, true);
-                        }
-
-                        Debug.WriteLine($"一時フォルダを正しい場所にコピー完了: {correctTempFolder}");
-                    }
-                    else
-                    {
-                        Debug.WriteLine("ユーザーIDが取得できないため、Blob Storageへのアップロードをスキップ");
-                    }
-                }
-                catch (Exception ex)
-                {
-                    Debug.WriteLine($"Blob Storageへのアップロード中にエラー: {ex.Message}");
-                    // アップロードに失敗してもローカルノートの作成は続行
-                }
+                await UploadNewNoteToBlobAsync(noteName, currentFolder, tempFolder);
 
                 // メインページを更新
                 LoadNotes();
@@ -2264,8 +2388,8 @@ namespace Flashnote
                 
                 // 共有フォルダとして元のUID配下にプレースホルダーを作成
                 var fullFolderPath = $"{sharedInfo.NotePath}/{folderName}";
-                var placeholderContent = "# This is a placeholder file to maintain folder structure";
-                await _blobStorageService.SaveSharedNoteFileAsync(sharedInfo.OriginalUserId, fullFolderPath, ".folder_placeholder", placeholderContent);
+                var placeholderContent = "# このフォルダはプレースホルダーファイルです。";
+                await _blobStorageService.SaveNoteAsync(sharedInfo.OriginalUserId, fullFolderPath, ".folder_placeholder", placeholderContent);
                 Debug.WriteLine($"フォルダプレースホルダーを作成: {fullFolderPath}/.folder_placeholder");
                 
                 await DisplayAlert("成功", $"共有フォルダ内に新しいフォルダ「{folderName}」を作成しました。", "OK");
@@ -2425,13 +2549,10 @@ namespace Flashnote
                             {
                                 try
                                 {
-                                    using var archive = ZipFile.OpenRead(ankplsPath);
-                                    var metaEntry = archive.Entries.FirstOrDefault(e => e.Name.Equals("metadata.json", StringComparison.OrdinalIgnoreCase));
-                                    if (metaEntry != null)
+                                    var metaJson = TryReadAnkplsMetadataJson(ankplsPath);
+                                    if (metaJson != null)
                                     {
-                                        using var s = metaEntry.Open();
-                                        using var r = new StreamReader(s);
-                                        localContent = r.ReadToEnd();
+                                        localContent = metaJson;
                                         try
                                         {
                                             using var doc = System.Text.Json.JsonDocument.Parse(localContent);
@@ -2506,7 +2627,7 @@ namespace Flashnote
                             try
                             {
                                 var targetDir = Path.Combine(localTempBase, subFolder ?? string.Empty, noteName + "_temp");
-                                if (!Directory.Exists(targetDir)) Directory.CreateDirectory(targetDir);
+                                Directory.CreateDirectory(targetDir);
                                 var targetPath = Path.Combine(targetDir, "metadata.json");
                                 File.WriteAllText(targetPath, remoteJson);
                             }
@@ -2517,7 +2638,7 @@ namespace Flashnote
                         }
                         else
                         {
-                            Debug.WriteLine($"Neither local nor remote metadata contains timestamps for {noteName}, skipping");
+                            Debug.WriteLine($"Neither local or remote metadata contains timestamps for {noteName}, skipping");
                         }
                     }
                     catch (Exception exNote)
@@ -2978,6 +3099,145 @@ namespace Flashnote
             {
                 Debug.WriteLine($"DownloadSharedFolderRecursiveAsync error for folder {folderId}: {ex.Message}");
             }
+        }
+
+        private async void OnItemMenuClicked(object sender, EventArgs e)
+        {
+            try
+            {
+                Note note = null;
+
+                if (sender is BindableObject bindable)
+                {
+                    note = bindable.BindingContext as Note;
+                }
+
+                if (note == null && sender is Button btn && btn.CommandParameter is Note noteFromParam)
+                {
+                    note = noteFromParam;
+                }
+
+                if (note == null)
+                {
+                    return;
+                }
+
+                // 既存の右クリック/長押し相当のメニューを流用
+                var action = await DisplayActionSheet(note.Name, "キャンセル", null, "色の変更");
+                if (action == "色の変更")
+                {
+                    await OnChangeColorForNoteAsync(note);
+                }
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"OnItemMenuClicked error: {ex.Message}");
+            }
+        }
+
+        private List<Flashnote.Views.ColorOption> BuildColorOptions()
+        {
+            var orderedKeys = new[]
+            {
+                "blue",
+                "brown",
+                "gray",
+                "green",
+                "lightblue",
+                "lightgreen",
+                "orange",
+                "pink",
+                "purple",
+                "red",
+                "yellow",
+            };
+
+            return orderedKeys
+                .Select(k => new Flashnote.Views.ColorOption(k, GetColorFromName(k)))
+                .ToList();
+        }
+
+        private static Color GetColorFromName(string name)
+        {
+            return (name ?? string.Empty).ToLowerInvariant() switch
+            {
+                "red" => Colors.Red,
+                "blue" => Colors.Blue,
+                "green" => Colors.Green,
+                "yellow" => Colors.Yellow,
+                "orange" => Colors.Orange,
+                "purple" => Colors.Purple,
+                "pink" => Colors.Pink,
+                "brown" => Colors.Brown,
+                "gray" => Colors.Gray,
+                "lightblue" => Colors.LightBlue,
+                "lightgreen" => Colors.LightGreen,
+                _ => Colors.Black,
+            };
+        }
+
+        private Task<string?> ShowColorPickerOverlayAsync(IReadOnlyList<Flashnote.Views.ColorOption> options)
+        {
+            _colorPickerTcs?.TrySetResult(null);
+            _colorPickerTcs = new TaskCompletionSource<string?>();
+
+            ColorPickerRow.Children.Clear();
+            foreach (var opt in options)
+            {
+                ColorPickerRow.Children.Add(CreateColorPickerItem(opt));
+            }
+
+            ColorPickerOverlay.IsVisible = true;
+            return _colorPickerTcs.Task;
+        }
+
+        private View CreateColorPickerItem(Flashnote.Views.ColorOption opt)
+        {
+            var swatch = new Frame
+            {
+                WidthRequest = 40,
+                HeightRequest = 40,
+                CornerRadius = 20,
+                BackgroundColor = opt.Color,
+                BorderColor = Colors.LightGray,
+                Padding = 0,
+                HasShadow = false,
+                HorizontalOptions = LayoutOptions.Center
+            };
+
+            var label = new Label
+            {
+                Text = opt.Key,
+                FontSize = 10,
+                WidthRequest = 76,
+                HorizontalTextAlignment = TextAlignment.Center,
+                LineBreakMode = LineBreakMode.TailTruncation,
+                TextColor = Colors.Black
+            };
+
+            var layout = new VerticalStackLayout
+            {
+                Spacing = 6,
+                WidthRequest = 76,
+                Children = { swatch, label }
+            };
+
+            var tap = new TapGestureRecognizer();
+            tap.Tapped += (_, __) => CloseColorPickerOverlay(opt.Key);
+            layout.GestureRecognizers.Add(tap);
+
+            return layout;
+        }
+
+        private void CloseColorPickerOverlay(string? selectedKey)
+        {
+            ColorPickerOverlay.IsVisible = false;
+            _colorPickerTcs?.TrySetResult(selectedKey);
+        }
+
+        private void OnColorPickerOverlayDismissed(object sender, EventArgs e)
+        {
+            CloseColorPickerOverlay(null);
         }
     }
 }

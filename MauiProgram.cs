@@ -41,10 +41,11 @@ public static class MauiProgram
 		builder.Services.AddSingleton<SharedKeyService>();
 		builder.Services.AddSingleton<FileWatcherService>();
 		builder.Services.AddSingleton<AnimationService>();
-		builder.Services.AddSingleton<CardSyncService>(serviceProvider => 
+		builder.Services.AddSingleton<CardSyncService>(serviceProvider =>
 			new CardSyncService(
 				serviceProvider.GetRequiredService<BlobStorageService>(),
-				serviceProvider.GetRequiredService<SharedKeyService>()
+				serviceProvider.GetRequiredService<SharedKeyService>(),
+				serviceProvider.GetRequiredService<UnsynchronizedNotesService>()
 			));
 		builder.Services.AddSingleton<AnkiExporter>();
 		builder.Services.AddSingleton<AnkiImporter>();
