@@ -707,18 +707,9 @@ namespace Flashnote.Services.Sync
                 Debug.WriteLine($"共有ノートカード追加開始 - 元UID: {originalUserId}, ノートパス: {notePath}, カードID: {cardId}");
                 
                 var containerClient = _blobStorageClient.Client.GetBlobContainerClient(BlobStorageClient.ContainerName);
-                // Build full path for cards.txt and card JSON depending on layout
-                string fullPath;
-                if (Guid.TryParse(notePath, out _))
-                {
-                    // flat layout: {originalUserId}/{notePath}/cards.txt
-                    fullPath = $"{originalUserId}/{notePath}/cards.txt";
-                }
-                else
-                {
-                    // hierarchical: notePath may contain subfolders (e.g. "sub/folder/note")
-                    fullPath = $"{originalUserId}/{notePath}/cards.txt";
-                }
+                // notePath は既にフラット/階層いずれの形式でも解決済みの相対パスとして渡ってくるため、
+                // そのまま連結する（共有ノートはUUID分岐が不要）。
+                string fullPath = $"{originalUserId}/{notePath}/cards.txt";
 
                 var blobClient = containerClient.GetBlobClient(fullPath);
                 cancellationTokenSource = NetworkOperationCancellationManager.CreateCancellationTokenSource(TimeSpan.FromSeconds(30));

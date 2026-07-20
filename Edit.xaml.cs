@@ -9,6 +9,7 @@ using System.Reflection;
 using Flashnote.Views;
 using Flashnote.Models;
 using Flashnote.Services;
+using Flashnote.Services.Sync;
 
 namespace Flashnote
 {
@@ -235,8 +236,7 @@ namespace Flashnote
                     // If note is inside a subfolder, try to get subfolder display name via its metadata.originalName
                     try
                     {
-                        var documentsPath = Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments);
-                        var flashnotePath = Path.Combine(documentsPath, "Flashnote");
+                        var flashnotePath = SyncPathResolver.GetLocalNoteRoot();
                         var noteDirectory = Path.GetDirectoryName(ankplsFilePath);
                         if (!string.IsNullOrEmpty(noteDirectory) && !noteDirectory.Equals(flashnotePath, StringComparison.OrdinalIgnoreCase))
                         {
@@ -686,8 +686,7 @@ namespace Flashnote
                             string subFolder = null;
                             
                             // サブフォルダ情報を取得
-                            var documentsPath = Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments);
-                            var flashnotePath = Path.Combine(documentsPath, "Flashnote");
+                            var flashnotePath = SyncPathResolver.GetLocalNoteRoot();
                             var noteDirectory = Path.GetDirectoryName(ankplsFilePath);
                             if (noteDirectory.StartsWith(flashnotePath, StringComparison.OrdinalIgnoreCase))
                             {
@@ -732,8 +731,7 @@ namespace Flashnote
                             
                             // サブフォルダ情報を取得
                             string subFolder = null;
-                            var documentsPath = Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments);
-                            var flashnotePath = Path.Combine(documentsPath, "Flashnote");
+                            var flashnotePath = SyncPathResolver.GetLocalNoteRoot();
                             var noteDirectory = Path.GetDirectoryName(ankplsFilePath);
                             if (noteDirectory.StartsWith(flashnotePath, StringComparison.OrdinalIgnoreCase))
                             {
@@ -2178,31 +2176,14 @@ namespace Flashnote
                 var updatedCardsContent = $"{existingCards.Count}\n{string.Join("\n", existingCards.Select(c => $"{c.Id},{c.LastModified}"))}";
                 
                 // 更新されたcards.txtをサーバーにアップロード
-                bool isFlat = Guid.TryParse(noteName, out _);
-                if (isFlat)
-                {
-                    // flat layout: uid/{noteName}/cards.txt
-                    await _blobStorageService.SaveNoteAsync(uid, noteName, updatedCardsContent, null);
-                }
-                else
-                {
-                    await _blobStorageService.SaveNoteAsync(uid, noteName, updatedCardsContent, subFolder);
-                }
+                // (パス構築はSaveNoteAsync内部でBlobPathResolverにより一元的に解決される)
+                await _blobStorageService.SaveNoteAsync(uid, noteName, updatedCardsContent, subFolder);
                 Debug.WriteLine($"通常ノート: 更新されたcards.txtをBlob Storageにアップロード: {noteName}");
-                
+
                 // 編集されたカードのJSONファイルをアップロード
                 if (File.Exists(jsonPath))
                 {
-                    string cardPath;
-                    if (isFlat)
-                    {
-                        // uid/{noteName}/cards
-                        cardPath = $"{noteName}/cards";
-                    }
-                    else
-                    {
-                        cardPath = !string.IsNullOrEmpty(subFolder) ? $"{subFolder}/{noteName}/cards" : $"{noteName}/cards";
-                    }
+                    string cardPath = BlobPathResolver.ResolveNoteSubPath(noteName, subFolder, "cards");
                     await _blobStorageService.SaveNoteAsync(uid, $"{editCardId}.json", jsonContent, cardPath);
                     Debug.WriteLine($"通常ノート: カードJSONファイルをBlob Storageにアップロード: {editCardId}.json");
                 }

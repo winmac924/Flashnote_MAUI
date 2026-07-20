@@ -31,6 +31,7 @@
     <Compile Include="..\Services\Sync\NoteBackupService.cs" Link="SyncSources\NoteBackupService.cs" />
     <Compile Include="..\Services\Sync\ConflictManager.cs" Link="SyncSources\ConflictManager.cs" />
     <Compile Include="..\Services\Sync\IncrementalSyncService.cs" Link="SyncSources\IncrementalSyncService.cs" />
+    <Compile Include="..\Services\Sync\BlobPathResolver.cs" Link="SyncSources\BlobPathResolver.cs" />
   </ItemGroup>
 
 </Project>

@@ -31,6 +31,20 @@ namespace Flashnote.Services
         private Dictionary<string, SharedKeyInfo> _sharedNotes;
         private readonly BlobStorageService _blobStorageService;
 
+        // 共有キーJSONの読み込み/書き出しで繰り返し生成されていたオプションを共通化。
+        private static readonly JsonSerializerOptions SharedKeyReadOptions = new JsonSerializerOptions
+        {
+            PropertyNameCaseInsensitive = true,
+            PropertyNamingPolicy = JsonNamingPolicy.CamelCase
+        };
+
+        private static readonly JsonSerializerOptions SharedKeyWriteOptions = new JsonSerializerOptions
+        {
+            WriteIndented = true,
+            Encoder = System.Text.Encodings.Web.JavaScriptEncoder.UnsafeRelaxedJsonEscaping,
+            PropertyNamingPolicy = JsonNamingPolicy.CamelCase
+        };
+
         public SharedKeyService()
         {
             var appDataPath = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
@@ -135,11 +149,7 @@ namespace Flashnote.Services
                 var json = await File.ReadAllTextAsync(filePath);
                 Debug.WriteLine($"読み込んだJSON: {json}");
                 
-                var jsonOptions = new JsonSerializerOptions
-                {
-                    PropertyNameCaseInsensitive = true,
-                    PropertyNamingPolicy = JsonNamingPolicy.CamelCase
-                };
+                var jsonOptions = SharedKeyReadOptions;
                 
                 var importedSharedNotes = JsonSerializer.Deserialize<Dictionary<string, SharedKeyInfo>>(json, jsonOptions);
                 
@@ -222,12 +232,7 @@ namespace Flashnote.Services
                     // サーバーにファイルがない場合は、ローカルの共有キーをアップロード
                     if (_sharedNotes.Count > 0)
                     {
-                        var jsonOption = new JsonSerializerOptions 
-                        { 
-                            WriteIndented = true,
-                            Encoder = System.Text.Encodings.Web.JavaScriptEncoder.UnsafeRelaxedJsonEscaping,
-                            PropertyNamingPolicy = JsonNamingPolicy.CamelCase
-                        };
+                        var jsonOption = SharedKeyWriteOptions;
                         var currentShareKeysJson = JsonSerializer.Serialize(_sharedNotes, jsonOption);
                         await _blobStorageService.UploadSharedKeysAsync(uid, currentShareKeysJson);
                         Debug.WriteLine("ローカルの共有キーをサーバーにアップロード完了");
@@ -235,11 +240,7 @@ namespace Flashnote.Services
                     return;
                 }
 
-                var serverSharedNotes = JsonSerializer.Deserialize<Dictionary<string, SharedKeyInfo>>(serverSharedKeysJson, new JsonSerializerOptions
-                {
-                    PropertyNameCaseInsensitive = true,
-                    PropertyNamingPolicy = JsonNamingPolicy.CamelCase
-                });
+                var serverSharedNotes = JsonSerializer.Deserialize<Dictionary<string, SharedKeyInfo>>(serverSharedKeysJson, SharedKeyReadOptions);
                 if (serverSharedNotes == null)
                 {
                     Debug.WriteLine("サーバーの共有キーファイルの解析に失敗しました");
@@ -270,12 +271,7 @@ namespace Flashnote.Services
                 if (serverSharedNotes.Count == 0)
                 {
                     Debug.WriteLine("サーバーの共有キーが空のため、ローカルの共有キーをアップロードします");
-                    var jsonOption = new JsonSerializerOptions 
-                    { 
-                        WriteIndented = true,
-                        Encoder = System.Text.Encodings.Web.JavaScriptEncoder.UnsafeRelaxedJsonEscaping,
-                        PropertyNamingPolicy = JsonNamingPolicy.CamelCase
-                    };
+                    var jsonOption = SharedKeyWriteOptions;
                     var currentShareKeysJson = JsonSerializer.Serialize(_sharedNotes, jsonOption);
                     await _blobStorageService.UploadSharedKeysAsync(uid, currentShareKeysJson);
                     Debug.WriteLine("ローカルの共有キーをサーバーにアップロード完了");
@@ -283,12 +279,7 @@ namespace Flashnote.Services
                 }
 
                 // 4. ローカルとサーバーの両方に共有キーがある場合の同期処理
-                var jsonOptions = new JsonSerializerOptions 
-                { 
-                    WriteIndented = true,
-                    Encoder = System.Text.Encodings.Web.JavaScriptEncoder.UnsafeRelaxedJsonEscaping,
-                    PropertyNamingPolicy = JsonNamingPolicy.CamelCase
-                };
+                var jsonOptions = SharedKeyWriteOptions;
                 var currentSharedKeysJson = JsonSerializer.Serialize(_sharedNotes, jsonOptions);
                 await _blobStorageService.UploadSharedKeysAsync(uid, currentSharedKeysJson);
                 Debug.WriteLine("現在の共有キーをサーバーにアップロード完了");
@@ -424,7 +415,7 @@ namespace Flashnote.Services
                 Debug.WriteLine($"metadata 解析: originalName={originalName}, displayName={displayName}");
                 
                 // ローカルの保存先パスを決定
-                var localBasePath = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments), "Flashnote");
+                var localBasePath = SyncPathResolver.GetLocalNoteRoot();
                 var tempBasePath = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Flashnote");
                 
                 string ankplsPath;
@@ -563,7 +554,7 @@ namespace Flashnote.Services
                 Debug.WriteLine($"フォルダ metadata 解析: originalName={originalName}, displayName={displayName}, isFolder={isFolder}");
                 
                 // ローカルの保存先パスを決定
-                var localBasePath = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments), "Flashnote");
+                var localBasePath = SyncPathResolver.GetLocalNoteRoot();
                 var tempBasePath = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Flashnote");
                 
                 // フォルダの metadata.json を保存（Documents）
@@ -609,11 +600,7 @@ namespace Flashnote.Services
                 if (File.Exists(_sharedKeysFilePath))
                 {
                     var json = File.ReadAllText(_sharedKeysFilePath);
-                    var jsonOptions = new JsonSerializerOptions
-                    {
-                        PropertyNameCaseInsensitive = true,
-                        PropertyNamingPolicy = JsonNamingPolicy.CamelCase
-                    };
+                    var jsonOptions = SharedKeyReadOptions;
                     _sharedNotes = JsonSerializer.Deserialize<Dictionary<string, SharedKeyInfo>>(json, jsonOptions) ?? new Dictionary<string, SharedKeyInfo>();
                     Debug.WriteLine($"共有キーを読み込み: {_sharedNotes.Count}件");
                 }
@@ -633,12 +620,7 @@ namespace Flashnote.Services
         {
             try
             {
-                var jsonOptions = new JsonSerializerOptions 
-                { 
-                    WriteIndented = true,
-                    Encoder = System.Text.Encodings.Web.JavaScriptEncoder.UnsafeRelaxedJsonEscaping,
-                    PropertyNamingPolicy = JsonNamingPolicy.CamelCase
-                };
+                var jsonOptions = SharedKeyWriteOptions;
                 var json = JsonSerializer.Serialize(_sharedNotes, jsonOptions);
                 File.WriteAllText(_sharedKeysFilePath, json, System.Text.Encoding.UTF8);
                 Debug.WriteLine($"共有キーを保存: {_sharedNotes.Count}件");

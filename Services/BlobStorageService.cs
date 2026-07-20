@@ -162,19 +162,7 @@ namespace Flashnote.Services
                 Debug.WriteLine($"ノートの取得開始 - UID: {uid}, ノート名: {noteName}, サブフォルダ: {subFolder ?? "なし"}");
 
                 var containerClient = _blobServiceClient.GetBlobContainerClient(CONTAINER_NAME);
-                string fullPath;
-
-                // 新形式の構造に対応
-                if (Guid.TryParse(noteName, out _)) // UUID形式かどうかをチェック
-                {
-                    fullPath = $"{uid}/{noteName}/cards.txt";
-                }
-                else
-                {
-                    // 旧形式の構造
-                    var userPath = GetUserPath(uid, subFolder);
-                    fullPath = $"{userPath}/{noteName}/cards.txt";
-                }
+                string fullPath = BlobPathResolver.ResolveNoteFilePath(uid, noteName, subFolder);
 
                 Debug.WriteLine($"検索対象のパス: {fullPath}");
                 var blobClient = containerClient.GetBlobClient(fullPath);
@@ -233,23 +221,9 @@ namespace Flashnote.Services
                 Debug.WriteLine($"ノートの保存開始 - UID: {uid}, ノート名: {noteName}, サブフォルダ: {subFolder ?? "なし"}");
                 
                 var containerClient = _blobServiceClient.GetBlobContainerClient(CONTAINER_NAME);
-                string fullPath;
-
-                // ノート名の先頭セグメントがUUID形式の場合は、GetNoteContentAsync/AppendCardToNoteAsync と
-                // 同じフラットレイアウト(uid/{noteId}/...、subFolderを含めない)として扱う。
-                // ここでsubFolderを含めてしまうと、新規ノート作成時にアップロードした初期cards.txtと
-                // その後カード追加時にAppendCardToNoteAsyncが書き込むcards.txtのパスが食い違い、
-                // サーバー側で「ノートが見つかりません」と誤判定される不具合になる。
-                var firstSegment = noteName.Split('/')[0];
-                if (Guid.TryParse(firstSegment, out _))
-                {
-                    fullPath = noteName.EndsWith(".json") ? $"{uid}/{noteName}" : $"{uid}/{noteName}/cards.txt";
-                }
-                else
-                {
-                    var userPath = GetUserPath(uid, subFolder);
-                    fullPath = noteName.EndsWith(".json") ? $"{userPath}/{noteName}" : $"{userPath}/{noteName}/cards.txt";
-                }
+                string fullPath = noteName.EndsWith(".json")
+                    ? BlobPathResolver.ResolveDirectFilePath(uid, noteName, subFolder)
+                    : BlobPathResolver.ResolveNoteFilePath(uid, noteName, subFolder);
 
                 var blobClient = containerClient.GetBlobClient(fullPath);
                 cancellationTokenSource = NetworkOperationCancellationManager.CreateCancellationTokenSource(TimeSpan.FromSeconds(30));
@@ -482,17 +456,7 @@ namespace Flashnote.Services
                             }
 
                             // Construct possible blob path for card JSON
-                            string blobName;
-                            if (Guid.TryParse(noteName, out _))
-                            {
-                                // flat UUID layout on blob: uid/{noteName}/cards/{uuid}.json
-                                blobName = $"{uid}/{noteName}/cards/{uuid}.json";
-                            }
-                            else
-                            {
-                                var userPath = GetUserPath(uid, subFolder);
-                                blobName = $"{userPath}/{noteName}/cards/{uuid}.json";
-                            }
+                            string blobName = BlobPathResolver.ResolveDirectFilePath(uid, $"{noteName}/cards/{uuid}.json", subFolder);
 
                             try
                             {
@@ -540,17 +504,7 @@ namespace Flashnote.Services
                     var imgDir = Path.Combine(tempDir, "img");
                     if (!Directory.Exists(imgDir)) Directory.CreateDirectory(imgDir);
 
-                    string imageFolderBlobPath;
-                    if (Guid.TryParse(noteName, out _))
-                    {
-                        // flat UUID layout: {noteName}/img
-                        imageFolderBlobPath = $"{noteName}/img";
-                    }
-                    else
-                    {
-                        // hierarchical: include subFolder if present
-                        imageFolderBlobPath = string.IsNullOrEmpty(subFolder) ? $"{noteName}/img" : $"{subFolder}/{noteName}/img";
-                    }
+                    string imageFolderBlobPath = BlobPathResolver.ResolveNoteSubPath(noteName, subFolder, "img");
 
                     Debug.WriteLine($"画像フォルダをダウンロード: blobFolder={imageFolderBlobPath}");
                     var imageFiles = await GetImageFilesAsync(uid, imageFolderBlobPath);
@@ -883,18 +837,7 @@ namespace Flashnote.Services
                 Debug.WriteLine($"カード追加開始 - UID: {uid}, ノート名: {noteName}, カードID: {cardId}, サブフォルダ: {subFolder ?? "なし"}");
                 
                 var containerClient = _blobServiceClient.GetBlobContainerClient(CONTAINER_NAME);
-                // Build fullPath for cards.txt depending on layout (flat UUID vs hierarchical)
-                string fullPath;
-                if (Guid.TryParse(noteName, out _))
-                {
-                    // flat layout: uid/{noteName}/cards.txt
-                    fullPath = $"{uid}/{noteName}/cards.txt";
-                }
-                else
-                {
-                    var userPath = GetUserPath(uid, subFolder);
-                    fullPath = $"{userPath}/{noteName}/cards.txt";
-                }
+                string fullPath = BlobPathResolver.ResolveNoteFilePath(uid, noteName, subFolder);
 
                 var blobClient = containerClient.GetBlobClient(fullPath);
                 cancellationTokenSource = NetworkOperationCancellationManager.CreateCancellationTokenSource(TimeSpan.FromSeconds(30));
@@ -925,17 +868,7 @@ namespace Flashnote.Services
                 
 
                 // カードのJSONファイルを個別に保存
-                string cardJsonPath;
-                if (Guid.TryParse(noteName, out _))
-                {
-                    // flat layout: uid/{noteName}/cards/{cardId}.json
-                    cardJsonPath = $"{uid}/{noteName}/cards/{cardId}.json";
-                }
-                else
-                {
-                    var userPath = GetUserPath(uid, subFolder);
-                    cardJsonPath = $"{userPath}/{noteName}/cards/{cardId}.json";
-                }
+                string cardJsonPath = BlobPathResolver.ResolveDirectFilePath(uid, $"{noteName}/cards/{cardId}.json", subFolder);
                 var cardBlobClient = containerClient.GetBlobClient(cardJsonPath);
                 using var cardStream = new MemoryStream(System.Text.Encoding.UTF8.GetBytes(cardContent));
                 await cardBlobClient.UploadAsync(cardStream, overwrite: true, cancellationToken: cancellationTokenSource.Token);

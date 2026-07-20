@@ -935,8 +935,7 @@ namespace Flashnote
             try
             {
                 var currentFolder = _currentPath.Peek();
-                var documentsPath = Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments);
-                var flashnotePath = Path.Combine(documentsPath, "Flashnote");
+                var flashnotePath = SyncPathResolver.GetLocalNoteRoot();
 
                 Debug.WriteLine($"UpdateAppTitle - 現在のフォルダ: {currentFolder}");
                 Debug.WriteLine($"UpdateAppTitle - Flashnoteパス: {flashnotePath}");
@@ -1095,8 +1094,7 @@ namespace Flashnote
                                     string subFolder = null;
                                     
                                     // サブフォルダ情報を取得
-                                    var documentsPath = Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments);
-                                    var flashnotePath = Path.Combine(documentsPath, "Flashnote");
+                                    var flashnotePath = SyncPathResolver.GetLocalNoteRoot();
                                     if (Path.GetDirectoryName(note.FullPath).StartsWith(flashnotePath, StringComparison.OrdinalIgnoreCase))
                                     {
                                         var relativePath = Path.GetRelativePath(flashnotePath, Path.GetDirectoryName(note.FullPath));
@@ -1435,8 +1433,7 @@ namespace Flashnote
                     metadata["createdAt"] = nowUtc;
 
                     // サブフォルダ情報がある場合は追加
-                    var documentsPath = Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments);
-                    var flashnotePath = Path.Combine(documentsPath, "Flashnote");
+                    var flashnotePath = SyncPathResolver.GetLocalNoteRoot();
                     if (currentFolder.StartsWith(flashnotePath, StringComparison.OrdinalIgnoreCase))
                     {
                         var relativePath = Path.GetRelativePath(flashnotePath, currentFolder);
@@ -1508,8 +1505,7 @@ namespace Flashnote
 
                     // サブフォルダを取得
                     string uploadSubFolder = null;
-                    var documentsPath = Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments);
-                    var flashnotePath = Path.Combine(documentsPath, "Flashnote");
+                    var flashnotePath = SyncPathResolver.GetLocalNoteRoot();
 
                     if (currentFolder.StartsWith(flashnotePath, StringComparison.OrdinalIgnoreCase))
                     {
@@ -1616,8 +1612,7 @@ namespace Flashnote
                         
                         // サブフォルダのパスを取得
                         string subFolder = null;
-                        var documentsPath = Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments);
-                        var flashnotePath = Path.Combine(documentsPath, "Flashnote");
+                        var flashnotePath = SyncPathResolver.GetLocalNoteRoot();
                         
                         if (currentFolder.StartsWith(flashnotePath, StringComparison.OrdinalIgnoreCase))
                         {
@@ -2216,8 +2211,7 @@ namespace Flashnote
         private string CheckIfSharedFolder()
         {
             var currentFolder = _currentPath.Peek();
-            var documentsPath = Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments);
-            var flashnotePath = Path.Combine(documentsPath, "Flashnote");
+            var flashnotePath = SyncPathResolver.GetLocalNoteRoot();
             
             Debug.WriteLine($"CheckIfSharedFolder - 現在のフォルダ: {currentFolder}");
             Debug.WriteLine($"CheckIfSharedFolder - Flashnoteパス: {flashnotePath}");
@@ -2475,7 +2469,7 @@ namespace Flashnote
 
                 Debug.WriteLine($"Server notes count: {serverNotes?.Count ?? 0}");
 
-                var docsBase = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments), "Flashnote");
+                var docsBase = SyncPathResolver.GetLocalNoteRoot();
                 var localTempBase = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Flashnote");
                 Directory.CreateDirectory(docsBase);
                 Directory.CreateDirectory(localTempBase);
@@ -2663,7 +2657,7 @@ namespace Flashnote
                 var allMetas = await _blobStorageService.GetAllMetadataJsonAsync(uid);
                 Debug.WriteLine($"metadata.json count: {allMetas?.Count ?? 0}");
 
-                var docsBase = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments), "Flashnote");
+                var docsBase = SyncPathResolver.GetLocalNoteRoot();
                 var localTempBase = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Flashnote");
                 Directory.CreateDirectory(docsBase);
                 Directory.CreateDirectory(localTempBase);
@@ -2833,7 +2827,7 @@ namespace Flashnote
                     return;
                 }
 
-                var docsBase = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments), "Flashnote");
+                var docsBase = SyncPathResolver.GetLocalNoteRoot();
                 var localTempBase = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Flashnote");
                 Directory.CreateDirectory(docsBase);
                 Directory.CreateDirectory(localTempBase);

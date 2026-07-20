@@ -1,3 +1,4 @@
+using Flashnote.Services.Sync;
 using Microsoft.Maui.Controls;
 using SkiaSharp.Views.Maui;
 using SkiaSharp;
@@ -447,8 +448,7 @@ namespace Flashnote.Services
                 
                 // サブフォルダ情報を取得
                 string subFolder = null;
-                var documentsPath = Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments);
-                var flashnotePath = Path.Combine(documentsPath, "Flashnote");
+                var flashnotePath = SyncPathResolver.GetLocalNoteRoot();
                 var noteDirectory = Path.GetDirectoryName(_ankplsFilePath);
                 if (noteDirectory.StartsWith(flashnotePath, StringComparison.OrdinalIgnoreCase))
                 {

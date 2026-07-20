@@ -1,5 +1,6 @@
 using Microsoft.Extensions.Logging;
 using System.Diagnostics;
+using Flashnote.Services.Sync;
 
 namespace Flashnote.Services
 {
@@ -137,8 +138,7 @@ namespace Flashnote.Services
 
         private string GetLocalResultPath(string noteName, string subFolder = null)
         {
-            var documentsPath = Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments);
-            var basePath = Path.Combine(documentsPath, "Flashnote");
+            var basePath = SyncPathResolver.GetLocalNoteRoot();
             
             if (!string.IsNullOrEmpty(subFolder))
             {

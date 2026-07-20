@@ -1,3 +1,4 @@
+using Flashnote.Services.Sync;
 using Microsoft.Maui.Controls;
 using System.Diagnostics;
 using System.IO.Compression;
@@ -66,12 +67,11 @@ namespace Flashnote
                 throw; // Confirmationの基本初期化エラーは再スロー
             }
 
-            // パス設定  
-            string documentsPath = Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments);
+            // パス設定
             ankplsFilePath = note;
 
-            // フォルダ構造を維持した一時ディレクトリのパスを生成  
-            string relativePath = Path.GetRelativePath(Path.Combine(documentsPath, "Flashnote"), Path.GetDirectoryName(ankplsFilePath));
+            // フォルダ構造を維持した一時ディレクトリのパスを生成
+            string relativePath = Path.GetRelativePath(SyncPathResolver.GetLocalNoteRoot(), Path.GetDirectoryName(ankplsFilePath));
             tempExtractPath = Path.Combine(
                 Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
                 "Flashnote",
@@ -246,45 +246,11 @@ namespace Flashnote
                                     // Determine subfolder name (if any)
                                     try
                                     {
-                                        var documentsPath = Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments);
-                                        var flashnotePath = Path.Combine(documentsPath, "Flashnote");
+                                        var flashnotePath = SyncPathResolver.GetLocalNoteRoot();
                                         var noteDirectory = Path.GetDirectoryName(ankplsFilePath);
                                         if (!string.IsNullOrEmpty(noteDirectory) && !noteDirectory.Equals(flashnotePath, StringComparison.OrdinalIgnoreCase))
                                         {
-                                            // Determine display name for subfolder by checking its metadata.json originalName first
-                                            var subfolderName = Path.GetFileName(noteDirectory);
-                                            try
-                                            {
-                                                // 1) Try metadata.json inside the folder itself
-                                                var folderMeta = Path.Combine(noteDirectory, "metadata.json");
-                                                if (File.Exists(folderMeta))
-                                                {
-                                                    var fmJson = File.ReadAllText(folderMeta);
-                                                    using var fmDoc = JsonDocument.Parse(fmJson);
-                                                    if (fmDoc.RootElement.TryGetProperty("originalName", out var sfOrig) && !string.IsNullOrEmpty(sfOrig.GetString()))
-                                                    {
-                                                        subfolderName = sfOrig.GetString();
-                                                    }
-                                                }
-                                                else
-                                                {
-                                                    // 2) Try local temp metadata (materialized UUID-based data may be stored under LocalApplicationData/Flashnote)
-                                                    var localTempMeta = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Flashnote", subfolderName + "_temp", "metadata.json");
-                                                    if (File.Exists(localTempMeta))
-                                                    {
-                                                        var ltJson = File.ReadAllText(localTempMeta);
-                                                        using var ltDoc = JsonDocument.Parse(ltJson);
-                                                        if (ltDoc.RootElement.TryGetProperty("originalName", out var ltOrig) && !string.IsNullOrEmpty(ltOrig.GetString()))
-                                                        {
-                                                            subfolderName = ltOrig.GetString();
-                                                        }
-                                                    }
-                                                }
-                                            }
-                                            catch (Exception exSub)
-                                            {
-                                                Debug.WriteLine($"Subfolder originalName read error: {exSub.Message}");
-                                            }
+                                            var subfolderName = ResolveSubfolderDisplayName(noteDirectory);
                                             if (!string.IsNullOrEmpty(subfolderName) && subfolderName != ".")
                                             {
                                                 title = $"{subfolderName}・{origName}";
@@ -331,51 +297,18 @@ namespace Flashnote
         {
             try
             {
-                var documentsPath = Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments);
-                var flashnotePath = Path.Combine(documentsPath, "Flashnote");
+                var flashnotePath = SyncPathResolver.GetLocalNoteRoot();
                 var noteDirectory = Path.GetDirectoryName(ankplsFilePath);
                 var noteName = Path.GetFileNameWithoutExtension(ankplsFilePath);
-                
+
                 // ルートフォルダの場合はノート名のみ
                 if (noteDirectory.Equals(flashnotePath, StringComparison.OrdinalIgnoreCase))
                 {
                     return noteName;
                 }
-                
+
                 // サブフォルダの場合は「サブフォルダ名・ノート名」の形式
-                var subfolderName = Path.GetFileName(noteDirectory);
-                try
-                {
-                    // 1) Try metadata.json inside the folder itself
-                    var folderMeta = Path.Combine(noteDirectory, "metadata.json");
-                    if (File.Exists(folderMeta))
-                    {
-                        var fmJson = File.ReadAllText(folderMeta);
-                        using var fmDoc = JsonDocument.Parse(fmJson);
-                        if (fmDoc.RootElement.TryGetProperty("originalName", out var sfOrig) && !string.IsNullOrEmpty(sfOrig.GetString()))
-                        {
-                            subfolderName = sfOrig.GetString();
-                        }
-                    }
-                    else
-                    {
-                        // 2) Try local temp metadata (materialized UUID-based data may be stored under LocalApplicationData/Flashnote)
-                        var localTempMeta = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Flashnote", subfolderName + "_temp", "metadata.json");
-                        if (File.Exists(localTempMeta))
-                        {
-                            var ltJson = File.ReadAllText(localTempMeta);
-                            using var ltDoc = JsonDocument.Parse(ltJson);
-                            if (ltDoc.RootElement.TryGetProperty("originalName", out var ltOrig) && !string.IsNullOrEmpty(ltOrig.GetString()))
-                            {
-                                subfolderName = ltOrig.GetString();
-                            }
-                        }
-                    }
-                }
-                catch (Exception exSub)
-                {
-                    Debug.WriteLine($"Subfolder originalName read error: {exSub.Message}");
-                }
+                var subfolderName = ResolveSubfolderDisplayName(noteDirectory);
                 return $"{subfolderName}・{noteName}";
             }
             catch (Exception ex)
@@ -384,6 +317,50 @@ namespace Flashnote
                 // エラーが発生した場合はノート名のみを返す
                 return Path.GetFileNameWithoutExtension(ankplsFilePath);
             }
+        }
+
+        /// <summary>
+        /// サブフォルダディレクトリの表示名を解決する。
+        /// フォルダ自身のmetadata.json、なければLocalApplicationData側の一時metadata.jsonの
+        /// originalNameを優先し、見つからなければディレクトリ名をそのまま使う。
+        /// GetNoteTitleWithSubfolder / LoadNote の両方から共通利用する。
+        /// </summary>
+        private string ResolveSubfolderDisplayName(string noteDirectory)
+        {
+            var subfolderName = Path.GetFileName(noteDirectory);
+            try
+            {
+                // 1) Try metadata.json inside the folder itself
+                var folderMeta = Path.Combine(noteDirectory, "metadata.json");
+                if (File.Exists(folderMeta))
+                {
+                    var fmJson = File.ReadAllText(folderMeta);
+                    using var fmDoc = JsonDocument.Parse(fmJson);
+                    if (fmDoc.RootElement.TryGetProperty("originalName", out var sfOrig) && !string.IsNullOrEmpty(sfOrig.GetString()))
+                    {
+                        subfolderName = sfOrig.GetString();
+                    }
+                }
+                else
+                {
+                    // 2) Try local temp metadata (materialized UUID-based data may be stored under LocalApplicationData/Flashnote)
+                    var localTempMeta = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Flashnote", subfolderName + "_temp", "metadata.json");
+                    if (File.Exists(localTempMeta))
+                    {
+                        var ltJson = File.ReadAllText(localTempMeta);
+                        using var ltDoc = JsonDocument.Parse(ltJson);
+                        if (ltDoc.RootElement.TryGetProperty("originalName", out var ltOrig) && !string.IsNullOrEmpty(ltOrig.GetString()))
+                        {
+                            subfolderName = ltOrig.GetString();
+                        }
+                    }
+                }
+            }
+            catch (Exception exSub)
+            {
+                Debug.WriteLine($"Subfolder originalName read error: {exSub.Message}");
+            }
+            return subfolderName;
         }
 
         // ページが表示されるたびに呼ばれるメソッド
@@ -422,8 +399,7 @@ namespace Flashnote
                 // 2. フォルダ共有されているかをチェック
                 try
                 {
-                    var documentsPath = Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments);
-                    var flashnotePath = Path.Combine(documentsPath, "Flashnote");
+                    var flashnotePath = SyncPathResolver.GetLocalNoteRoot();
                     var noteDirectory = Path.GetDirectoryName(ankplsFilePath);
                     
                     if (!string.IsNullOrEmpty(noteDirectory))
@@ -530,8 +506,7 @@ namespace Flashnote
             string subFolder = null;
             try
             {
-                var documentsPath = Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments);
-                var flashnotePath = Path.Combine(documentsPath, "Flashnote");
+                var flashnotePath = SyncPathResolver.GetLocalNoteRoot();
                 var noteDirectory = Path.GetDirectoryName(ankplsFilePath);
                 if (!string.IsNullOrEmpty(noteDirectory))
                 {

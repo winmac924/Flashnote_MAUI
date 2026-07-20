@@ -1,3 +1,4 @@
+using Flashnote.Services.Sync;
 using System;
 using System.Collections.Generic;
 using System.IO;
@@ -56,11 +57,10 @@ namespace Flashnote
             InitializeComponent();
 
             // ドキュメントパス設定
-            string documentsPath = Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments);
             ankplsFilePath = noteName;
 
             // 一時ディレクトリのパスを設定
-            string relativePath = Path.GetRelativePath(Path.Combine(documentsPath, "Flashnote"), Path.GetDirectoryName(ankplsFilePath));
+            string relativePath = Path.GetRelativePath(SyncPathResolver.GetLocalNoteRoot(), Path.GetDirectoryName(ankplsFilePath));
             tempExtractPath = Path.Combine(
                 Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
                 "Flashnote",

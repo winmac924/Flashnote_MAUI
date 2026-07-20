@@ -10,6 +10,7 @@ using System.Diagnostics;
 using SQLite;
 using System.Linq;
 using Flashnote;
+using Flashnote.Services.Sync;
 
 namespace Flashnote.Services
 {
@@ -1001,8 +1002,7 @@ namespace Flashnote.Services
                 );
                 
                 // noteFolderからサブフォルダ構造を取得
-                string documentsPath = Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments);
-                string FlashnoteDocumentsPath = Path.Combine(documentsPath, "Flashnote");
+                string FlashnoteDocumentsPath = SyncPathResolver.GetLocalNoteRoot();
                 
                 string subFolder = "";
                 if (noteFolder.StartsWith(FlashnoteDocumentsPath, StringComparison.OrdinalIgnoreCase))
@@ -1028,7 +1028,7 @@ namespace Flashnote.Services
 
                 Debug.WriteLine($"=== SaveImportedCards 開始 ===");
                 Debug.WriteLine($"noteFolder: {noteFolder}");
-                Debug.WriteLine($"documentsPath: {documentsPath}");
+                Debug.WriteLine($"FlashnoteDocumentsPath: {FlashnoteDocumentsPath}");
                 Debug.WriteLine($"FlashnoteDocumentsPath: {FlashnoteDocumentsPath}");
                 Debug.WriteLine($"subFolder: '{subFolder}'");
                 Debug.WriteLine($"localFlashnotePath: {localFlashnotePath}");

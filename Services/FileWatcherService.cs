@@ -2,6 +2,7 @@ using System;
 using System.IO;
 using System.Threading.Tasks;
 using Microsoft.Maui.Dispatching;
+using Flashnote.Services.Sync;
 
 namespace Flashnote.Services
 {
@@ -20,7 +21,7 @@ namespace Flashnote.Services
 
         public FileWatcherService()
         {
-            _folderPath = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments), "Flashnote");
+            _folderPath = SyncPathResolver.GetLocalNoteRoot();
             // _dispatcher = Application.Current?.Dispatcher ?? throw new InvalidOperationException("Dispatcher not available");
             // Dispatcherの取得はイベント発火時に行う
             InitializeWatcher();
