@@ -105,12 +105,16 @@ dotnet clean -c $Configuration
 # バージョン情報の更新
 Update-CsprojVersion -CsprojPath $csprojPath -Version $Version
 
+# パッケージの復元
+Write-Host "📦 パッケージを復元しています..." -ForegroundColor Blue
+dotnet restore
+
 # Windows用ビルド（自己完結型EXE）
 Write-Host "🏗️ Windows用実行ファイルをビルドしています..." -ForegroundColor Blue
-dotnet publish -f net9.0-windows10.0.19041.0 -c $Configuration -r win-x64 --self-contained true -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true
+dotnet publish -f net10.0-windows10.0.19041.0 -c $Configuration -r win-x64 --self-contained true -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true
 
 # ビルド結果の確認
-$outputPath = "bin\$Configuration\net9.0-windows10.0.19041.0\win-x64\publish\"
+$outputPath = "bin\$Configuration\net10.0-windows10.0.19041.0\win-x64\publish\"
 if (Test-Path $outputPath) {
     Write-Host "✅ ビルドが正常に完了しました！" -ForegroundColor Green
     Write-Host "📁 出力フォルダ: $outputPath" -ForegroundColor Yellow
@@ -129,6 +133,20 @@ if (Test-Path $outputPath) {
 } else {
     Write-Host "❌ エラー: ビルドが失敗しました。" -ForegroundColor Red
     exit 1
+}
+
+# MSIインストーラーのビルド（Program Filesへのインストール用）
+Write-Host "📦 MSIインストーラーをビルドしています..." -ForegroundColor Blue
+$pubDirFull = (Resolve-Path $outputPath).Path.TrimEnd('\')
+dotnet build Setup\Setup.wixproj -c $Configuration -p:Platform=x64 -p:PubDir="$pubDirFull" -p:ProductVersion=$Version
+
+$msiPath = "Setup\bin\x64\$Configuration\FlashnoteSetup.msi"
+if (Test-Path $msiPath) {
+    $msiFile = Get-Item $msiPath
+    $msiSize = [math]::Round($msiFile.Length / 1MB, 2)
+    Write-Host "✅ MSIインストーラーが生成されました: $($msiFile.FullName) ($msiSize MB)" -ForegroundColor Green
+} else {
+    Write-Host "⚠️ MSIインストーラーの生成に失敗しました。" -ForegroundColor Yellow
 }
 
 Write-Host "🎉 リリースビルドが完了しました！" -ForegroundColor Green

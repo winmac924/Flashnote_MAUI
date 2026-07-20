@@ -1,0 +1,56 @@
+<Wix xmlns="http://wixtoolset.org/schemas/v4/wxs"
+    xmlns:ui="http://wixtoolset.org/schemas/v4/wxs/ui">
+
+  <Package Name="Flashnote"
+           Manufacturer="winmac924"
+           Version="$(var.ProductVersion)"
+           UpgradeCode="9c7c1e8e-2f9b-4d4a-8a6a-6a6f6a6a6a6a"
+           Language="1041"
+           Codepage="65001"
+           Scope="perMachine">
+
+    <SummaryInformation Description="Flashnote Installer" Manufacturer="winmac924" />
+
+    <MajorUpgrade DowngradeErrorMessage="より新しいバージョンの Flashnote が既にインストールされています。"
+                  Schedule="afterInstallInitialize" />
+
+    <MediaTemplate EmbedCab="yes" />
+
+    <StandardDirectory Id="ProgramFiles64Folder">
+      <Directory Id="INSTALLFOLDER" Name="Flashnote" />
+    </StandardDirectory>
+
+    <ComponentGroup Id="INSTALLFOLDER_Files" Directory="INSTALLFOLDER">
+      <Files Include="$(var.PubDir)\**" />
+    </ComponentGroup>
+
+    <StandardDirectory Id="ProgramMenuFolder">
+      <Directory Id="ApplicationProgramsFolder" Name="Flashnote" />
+    </StandardDirectory>
+
+    <StandardDirectory Id="DesktopFolder" />
+
+    <Component Id="ApplicationShortcuts" Directory="ApplicationProgramsFolder" Guid="6f3b6f2a-6a4e-4a1f-9a2b-3c4d5e6f7a8b">
+      <Shortcut Id="StartMenuShortcut"
+                Name="Flashnote"
+                Target="[INSTALLFOLDER]Flashnote_MAUI.exe"
+                WorkingDirectory="INSTALLFOLDER" />
+      <Shortcut Id="DesktopShortcut"
+                Directory="DesktopFolder"
+                Name="Flashnote"
+                Target="[INSTALLFOLDER]Flashnote_MAUI.exe"
+                WorkingDirectory="INSTALLFOLDER" />
+      <RemoveFolder Id="RemoveApplicationProgramsFolder" Directory="ApplicationProgramsFolder" On="uninstall" />
+      <RegistryValue Root="HKCU" Key="Software\winmac924\Flashnote" Name="installed" Type="integer" Value="1" KeyPath="yes" />
+    </Component>
+
+    <Feature Id="MainFeature" Title="Flashnote" Level="1">
+      <ComponentGroupRef Id="INSTALLFOLDER_Files" />
+      <ComponentRef Id="ApplicationShortcuts" />
+    </Feature>
+
+    <Property Id="WIXUI_INSTALLDIR" Value="INSTALLFOLDER" />
+    <ui:WixUI Id="WixUI_InstallDir" />
+
+  </Package>
+</Wix>

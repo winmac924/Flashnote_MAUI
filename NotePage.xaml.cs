@@ -649,7 +649,14 @@ namespace Flashnote
                     _drawingLayer = null;
                     Debug.WriteLine("DrawingLayerを解放");
                 }
-                
+
+                if (_backgroundCanvas != null)
+                {
+                    _backgroundCanvas.Dispose();
+                    _backgroundCanvas = null;
+                    Debug.WriteLine("BackgroundCanvasを解放");
+                }
+
                 // ガベージコレクションを促進
                 GC.Collect();
                 GC.WaitForPendingFinalizers();
@@ -749,9 +756,10 @@ namespace Flashnote
                 
                 if (_backgroundCanvas != null)
                 {
+                    _backgroundCanvas.Dispose();
                     _backgroundCanvas = null;
                 }
-                
+
                 if (_textSelectionLayer != null)
                 {
                     _textSelectionLayer = null;
